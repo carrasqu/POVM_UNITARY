@@ -13,7 +13,7 @@ class MPS():
 
         # POVMs and other operators
         # Pauli matrices
-
+ 
         self.I = np.array([[1, 0],[0, 1]]);
         self.X = np.array([[0, 1],[1, 0]]);    self.s1 = self.X;
         self.Z = np.array([[1, 0],[0, -1]]);   self.s3 = self.Z;
@@ -26,8 +26,7 @@ class MPS():
         self.T = np.array([[1.0,0],[0,np.exp(-1j*np.pi/4.0)]])
         self.U1 = np.array([[np.exp(-1j*np.pi/3.0),  0] ,[ 0 ,np.exp(1j*np.pi/3.0)]])
 
-        #two-qubit gates: control-Y, control-Z
-        # TODO: how to check index
+        #two-qubit gates
         self.cy = ncon((self.oxo,self.I),([-1,-3],[-2,-4]))+ ncon((self.IxI,self.Y),([-1,-3],[-2,-4]))
         self.cz = ncon((self.oxo,self.I),([-1,-3],[-2,-4]))+ ncon((self.IxI,self.Z),([-1,-3],[-2,-4]))
 
@@ -43,8 +42,8 @@ class MPS():
             self.M[3,:,:] = 1.0/3.0*(np.array([[0, 0],[0, 1]]) + \
                                      0.5*np.array([[1, -1],[-1, 1]]) \
                                    + 0.5*np.array([[1, 1j],[-1j, 1]]) )
-
-        if POVM=='Tetra': # SIM-IC
+ 
+        if POVM=='Tetra':
             self.K=4;
 
             self.M=np.zeros((self.K,2,2),dtype=complex);
@@ -61,7 +60,7 @@ class MPS():
             self.v4=np.array([-np.sqrt(2.0)/3.0, -np.sqrt(2.0/3.0), -1.0/3.0 ]);
             self.M[3,:,:]=1.0/4.0*( self.I + self.v4[0]*self.s1+self.v4[1]*self.s2+self.v4[2]*self.s3);
 
-        elif POVM=='Trine': # only three POVM
+        elif POVM=='Trine':
             self.K=3;
             self.M=np.zeros((self.K,2,2),dtype=complex);
             phi0=0.0
@@ -91,25 +90,25 @@ class MPS():
         self.Trsy = ncon((self.M,self.it,self.Y),([3,2,1],[3,-1],[2,1]));
         self.Trsz = ncon((self.M,self.it,self.Z),([3,2,1],[3,-1],[2,1]));
         self.stab_ops = [self.Trsx,self.Trsz]
+   
 
-
-
+ 
         if MPS=="GHZ":
-            # Copy tensors used to construct GHZ as an MPS. The procedure below should work for any other MPS
+            # Copy tensors used to construct GHZ as an MPS. The procedure below should work for any other MPS 
             cc = np.zeros((2,2)); # corner
             cc[0,0] = 2**(-1.0/(2*self.N));
             cc[1,1] = 2**(-1.0/(2*self.N));
             cb = np.zeros((2,2,2)); # bulk
             cb[0,0,0] = 2**(-1.0/(2*self.N));
             cb[1,1,1] = 2**(-1.0/(2*self.N));
-
-
+        
+       
             self.MPS = []
             self.MPS.append(cc)
             for i in range(self.N-2):
                 self.MPS.append(cb)
             self.MPS.append(cc)
-
+ 
         elif MPS=="Graph":
 
             MPS = []
@@ -156,37 +155,49 @@ class MPS():
             # last qubit
             MPS.append(np.transpose(Z)) # transpose is to keep the indexing order consistent with my poor choice
 
-            # testing
+            # testing 
             #GS = ncon((MPS[0],MPS[1],MPS[2],MPS[3]),([-1,1],[1,-2,2],[2,-3,3],[3,-4]))
             #GS = np.reshape(GS,(2**4))
 
             self.MPS = MPS
+        
+        elif MPS=="plus":
+            print(MPS,"squi")
+            plus = (1.0/np.sqrt(2.0))*np.ones(2) 
+            self.MPS = []
+             
+            self.MPS.append(np.reshape(plus,[2,1]))
 
-    def Fidelity(self,S): ## S is sample, with shape (batch, Nqubit)
-    ## this function computes the quantum fidelity tr(pho phi) for pure state, where pho = sum P(b) T-1(b,c), which turns to sample from P, phi is in MPS
+            for i in range(1,self.N-1):
+                self.MPS.append(np.reshape(plus,[1,2,1]))  
+
+            self.MPS.append(np.reshape(plus,[2,1]))       
+
+
+    def Fidelity(self,S):
         Fidelity = 0.0;
         F2 = 0.0;
-        Ns = S.shape[0] ## batch size
-        for i in range(Ns):
+        Ns = S.shape[0]
+        for i in range(Ns): 
 
-            # contracting the entire TN for each sample S[i,:]
+            # contracting the entire TN for each sample S[i,:]  
             #eT = ncon(( self.TB[0][:,:,S[i,0]], self.TB[1][:,:,:,:,S[i,1]]) ,( [1,2],[-1,-2,1,2 ]));
-            eT = ncon((self.it[:,S[i,0]],self.M,self.MPS[0],self.MPS[0]),([3],[3,2,1],[1,-1],[2,-2]));
-
+            eT = ncon((self.it[:,S[i,0]],self.M,self.MPS[0],self.MPS[0]),([3],[3,2,1],[1,-1],[2,-2]));    
+            
             for j in range(1,self.N-1):
-                #eT = ncon((eT,self.TB[j][:,:,:,:,S[i,j]]),([ 1,2],[ -1,-2, 1,2 ]));
-                eT = ncon((eT,self.it[:,S[i,j]],self.M,self.MPS[j],self.MPS[j]),([2,4],[1],[1,5,3],[2,3,-1],[4,5,-2]));
-
-            #eT = ncon((eT, self.TB[self.N-1][:,:,S[i,self.N-1]]),([1,2],[1,2 ]));
+                #eT = ncon((eT,self.TB[j][:,:,:,:,S[i,j]]),([ 1,2],[ -1,-2, 1,2 ]));                 
+                eT = ncon((eT,self.it[:,S[i,j]],self.M,self.MPS[j],self.MPS[j]),([2,4],[1],[1,5,3],[2,3,-1],[4,5,-2]));           
+                
+            #eT = ncon((eT, self.TB[self.N-1][:,:,S[i,self.N-1]]),([1,2],[1,2 ])); 
             j = self.N-1
             eT = ncon((eT,self.it[:,S[i,j]],self.M,self.MPS[j],self.MPS[j]),([2,5],[1],[1,4,3],[3,2],[4,5]));
-            #print i, eT
+            #print i, eT 
             Fidelity = Fidelity + eT;
-            F2 = F2 + eT**2;
+            F2 = F2 + eT**2; 
             Fest=Fidelity/float(i+1);
             F2est=F2/float(i+1);
             Error = np.sqrt( np.abs( F2est-Fest**2 )/float(i+1));
-            #print i,np.real(Fest),Error
+            #print i,np.real(Fest),Error 
             #disp([i,i/Ns, real(Fest), real(Error)])
             #fflush(stdout);
 
@@ -198,29 +209,29 @@ class MPS():
 
         return np.real(Fidelity), Error
 
-    def cFidelity(self,S,logP): ## this is to compute classical fidelity
+    def cFidelity(self,S,logP):
         Fidelity = 0.0;
         F2 = 0.0;
         Ns = S.shape[0]
         KL = 0.0
-        K2 = 0.0
+        K2 = 0.0 
         for i in range(Ns):
+            
+            P = ncon(( self.MPS[0], self.MPS[0],self.M[S[i,0],:,:]),([1,-1],[2,-2],[1,2]))  
+             
 
-            ## this transforms density matrix to POVM prob
-            P = ncon(( self.MPS[0], self.MPS[0],self.M[S[i,0],:,:]),([1,-1],[2,-2],[1,2]))
-
-
-            # contracting the entire TN for each sample S[i,:]
+            # contracting the entire TN for each sample S[i,:]  
             for j in range(1,self.N-1):
                 P = ncon((P,self.MPS[j], self.MPS[j],self.M[S[i,j],:,:]),([1,2],[1,3,-1],[2,4,-2],[3,4]))
 
+            
             P = ncon((P,self.MPS[self.N-1], self.MPS[self.N-1],self.M[S[i,self.N-1],:,:]),([1,2],[3,1],[4,2],[3,4]))
 
             ee = np.sqrt(P/np.exp(logP[i]))
             Fidelity = Fidelity + ee
             F2 = F2 + ee**2
 
-            KL = KL + 2*np.log(ee); ## factor of 2 from np.sqrt
+            KL = KL + 2*np.log(ee);
             K2 = K2 +4*(np.log(ee))**2;
 
         F2 = F2/float(Ns);
@@ -237,15 +248,15 @@ class MPS():
 
 
         return np.real(Fidelity), Error, np.real(KL), ErrorKL
-
+     
     def stabilizers(self,i,si,j,sj,k,sk):
         MPS = deepcopy(self.MPS)
-        if i == 0:
+        if i == 0: 
            MPS[i] = ncon((MPS[i],si),([1,-2],[-1,1]))
         elif i==self.N-1:
            MPS[i] = ncon((MPS[i],si),([-2,1],[-1,1]))
-        else:
-           MPS[i] = ncon((MPS[i],si),([-1,1,-3],[-2,1]))
+        else: 
+           MPS[i] = ncon((MPS[i],si),([-1,1,-3],[-2,1])) 
 
         if j == 0:
            MPS[j] = ncon((MPS[j],sj),([1,-2],[-1,1]))
@@ -253,7 +264,7 @@ class MPS():
            MPS[j] = ncon((MPS[j],sj),([-2,1],[-1,1]))
         else:
            MPS[j] = ncon((MPS[j],sj),([-1,1,-3],[-2,1]))
-
+        
         if k == 0:
            MPS[k] = ncon((MPS[k],sk),([1,-2],[-1,1]))
         elif k==self.N-1:
@@ -264,27 +275,27 @@ class MPS():
 
         C = ncon((MPS[0],np.conj(self.MPS[0])),([1,-1],[1,-2]))
         for ii in range(1,self.N-1):
-            C = ncon((C,MPS[ii],np.conj(self.MPS[ii])),([1,2],[1,3,-1],[2,3,-2]))
-
-
-        ii = self.N-1
+            C = ncon((C,MPS[ii],np.conj(self.MPS[ii])),([1,2],[1,3,-1],[2,3,-2]))  
+            
+        
+        ii = self.N-1   
         C = ncon((C,MPS[ii],np.conj(self.MPS[ii])),([1,2],[3,1],[3,2]))
-        return C
-
-    def stabilizers_samples(self,S):
+        return C  
+       
+    def stabilizers_samples(self,S): 
         s = np.zeros(self.N);
         s2 = np.zeros(self.N);
         Ns = S.shape[0]
         for i in range(Ns):
-            for j in range(self.N):
-
+            for j in range(self.N): 
+                
                 if j == 0:
                    temp = self.Trsx[S[i,j]]*self.Trsz[S[i,j+1]]
                    s[0] = s[0] +  temp
                    s2[0] = s2[0] + temp**2
-
+                    
                 elif j == self.N-1:
-                   temp = self.Trsz[S[i,j-1]]*self.Trsx[S[i,j]]
+                   temp = self.Trsz[S[i,j-1]]*self.Trsx[S[i,j]] 
                    s[self.N-1] = s[self.N-1] +  temp
                    s2[self.N-1] = s2[self.N-1] + temp**2
 
@@ -292,46 +303,17 @@ class MPS():
                    temp =  self.Trsz[S[i,j-1]]*self.Trsx[S[i,j]]*self.Trsz[S[i,j+1]]
                    s[j] = s[j] +  temp
                    s2[j] = s2[j] +  temp**2
-
-
-
-
-        s2 = s2/float(Ns);
-        s = s/float(Ns);
-
-        Error = np.sqrt( np.abs( s2-s**2 )/float(Ns));
-
-        return s,Error
-
-    def stabilizersGHZ_samples(self,S):
-        s = np.zeros(self.N); ## N is number of qubit
-        s2 = np.zeros(self.N);
-        Ns = S.shape[0]
-        for i in range(Ns):
-
-            xxx=1.0
-            for j in range(self.N):
-
-                xxx=xxx*self.Trsx[S[i,j]]
-
-                if j < self.N-1:
-                   temp =  self.Trsz[S[i,j]]*self.Trsz[S[i,j+1]]
-                   s[j] = s[j] +  temp
-                   s2[j] = s2[j] +  temp**2
-
-            s[self.N-1]= s[self.N-1]+xxx
-            s2[self.N-1]= s2[self.N-1]+xxx**2
+ 
+                   
 
 
         s2 = s2/float(Ns);
-        s = s/float(Ns);
+        s = s/float(Ns); 
 
         Error = np.sqrt( np.abs( s2-s**2 )/float(Ns));
 
-        return s,Error
+        return s,Error 
 
-
-
-
+             
 
 
