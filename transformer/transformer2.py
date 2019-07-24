@@ -1,4 +1,5 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
+from ncon import ncon
 
 import tensorflow as tf
 import time
@@ -160,9 +161,9 @@ class DecoderLayer(tf.keras.layers.Layer):
     #self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
     #self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
     #self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-    #self.layernorm1 = tf.keras.layers.experimental.LayerNormalization(epsilon=1e-6)
+    #self.layernorm1 = tf.keras.layers.experimental.LayerNormalization(epsilon=1e-6) ## uncomment
     #self.layernorm2 = tf.keras.layers.experimental.LayerNormalization(epsilon=1e-6)
-    #self.layernorm3 = tf.keras.layers.experimental.LayerNormalization(epsilon=1e-6)
+    #self.layernorm3 = tf.keras.layers.experimental.LayerNormalization(epsilon=1e-6) ## uncomment
 
     self.dropout1 = tf.keras.layers.Dropout(rate)
     #self.dropout2 = tf.keras.layers.Dropout(rate)
@@ -309,7 +310,7 @@ def create_masks(inp, tar):
 
 
 
-
+### Parameters setting
 num_layers = 2 #4
 d_model = 128 #128
 dff = 128 # 512
@@ -323,18 +324,21 @@ input_vocab_size = target_vocab_size
 dropout_rate = 0.0
 
 MAX_LENGTH = 2 # number of qubits
-
 povm_='4Pauli'
-
 povm = POVM(POVM=povm_, Number_qubits=MAX_LENGTH)
-
 mps = MPS(POVM=povm_,Number_qubits=MAX_LENGTH,MPS="Graph")
-
 bias = povm.getinitialbias("+")
 
-EPOCHS = 20
+# define target state
+psi = 1/2.0 * np.array([1.,1.,1.,-1], dtype=complex)
+#psi = 1/np.sqrt(2.0) * np.array([1.,1.], dtype=complex)
+pho = np.outer(psi, np.conjugate(psi))
+prob = ncon((pho,povm.Mn),([1,2],[-1,2,1]))
+
+
+EPOCHS = 3 ##20
 j_init = 0
-Ndataset = 100000
+Ndataset = 4000 ## 100000
 
 transformer = Transformer(num_layers, d_model, num_heads, dff,
                           input_vocab_size, target_vocab_size, dropout_rate,bias)
@@ -415,20 +419,22 @@ def logP(config,training=False):
 
 
 def flip2_tf(S,O,K,site):
-    Ns = tf.shape(S)[0]
-    N  = tf.shape(S)[1]
-    flipped = tf.reshape(tf.keras.backend.repeat(S, K**2),(Ns*K**2,N))
-    a = tf.constant(np.array(list(it.product(range(K), repeat = 2)),dtype=np.float32)) # possible combinations of outcomes on 2 qubits
+  ## S: batch, O: gate, K: number of measurement outcomes, sites: [j,j+1]
+  ## S is not one-hot form
+    Ns = tf.shape(S)[0] ## batch size
+    N  = tf.shape(S)[1] ## Nqubit
+    flipped = tf.reshape(tf.keras.backend.repeat(S, K**2),(Ns*K**2,N)) ## repeat is to prepare K**2 outcome after O adds on, after reshape it has shape (batchsize * 16, Nqubit)
+    a = tf.constant(np.array(list(it.product(range(K), repeat = 2)),dtype=np.float32)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
     s0 = flipped[:,site[0]]
     s1 = flipped[:,site[1]]
-    a0 = tf.reshape(tf.tile(a[:,0],[Ns]),[-1])
+    a0 = tf.reshape(tf.tile(a[:,0],[Ns]),[-1]) ## tf.tile repeasts tensor Ns times
     a1 = tf.reshape(tf.tile(a[:,1],[Ns]),[-1])
     flipped = slicetf.replace_slice_in(flipped)[:,site[0]].with_value(tf.reshape( a0 ,[K**2*Ns,1]))
     flipped = slicetf.replace_slice_in(flipped)[:,site[1]].with_value(tf.reshape( a1 ,[K**2*Ns,1]))
     a = tf.tile(a,[Ns,1])
     indices_ = tf.cast(tf.concat([a,tf.reshape(s0,[tf.shape(s0)[0],1]),tf.reshape(s1,[tf.shape(s1)[0],1])],1),tf.int32)
-    ##getting the coefficients of the p-gates that accompany the flipped samples
-    Coef = tf.gather_nd(O,indices_)
+    ##getting the coefficients of the p-gates that accompany the flipped samples ## (Nq,Nq,Nq,Nq) shape for index
+    Coef = tf.gather_nd(O,indices_) ## O has to be tensor form
     ## transform samples to one hot vector
     #flipped = tf.one_hot(tf.cast(flipped,tf.int32),depth=K)
     #flipped = tf.reshape(flipped,[tf.shape(flipped)[0],tf.shape(flipped)[1]*tf.shape(flipped)[2]])
@@ -443,6 +449,19 @@ def loss_function(flip,co,gtype):
     co = tf.cast(co,dtype = tf.float32)
     loss = -tf.cast(f,tf.float32)*tf.reduce_mean(co * lnP)
     return loss
+
+
+def vectorize(num_sites, K):
+    l_basis = []
+    for i in range(K**num_sites):
+      basis_str = np.base_repr(i, base=K, padding=num_sites)[-num_sites:]
+      l_basis.append(np.array(list(basis_str), dtype=int))
+      #l_basis.append(basis_str)
+    l_basis = np.array(l_basis)
+    l_basis = tf.cast(l_basis, dtype=tf.int64)
+    lnP = logP(l_basis, training=False)
+    return lnP
+
 
 @tf.function
 def train_step(flip,co,gtype):
@@ -459,18 +478,21 @@ def train_step(flip,co,gtype):
 
 #sys.exit(0)
 
+
 if not os.path.exists("samples"):
     os.makedirs("samples")
 
+## site [j,j+1] > epoch > nsteps = Ndataset/batchsize
 for j in range(j_init,MAX_LENGTH-1):
 
     sites=[j,j+1] # on which sites to apply the gate
     gate = povm.p_two_qubit[1] # CZ gate
 
     if Ndataset != 0:
+        ## it ensures at least one batch size samples, since Ncall can be zero
         Ncalls = Ndataset /batch_size
         samples,lP = sample(batch_size) # get samples from the model
-        lP = np.reshape(lP,[-1,1])
+        lP = np.reshape(lP,[-1,1]) ## not necessary
 
         for k in range(int(Ncalls)):
             sa,llpp = sample(batch_size)
@@ -480,10 +502,9 @@ for j in range(j_init,MAX_LENGTH-1):
 
     gtype = 2 # 2-qubit gate
 
-    nsteps = int(samples.shape[0] / batch_size)
+    nsteps = int(samples.shape[0] / batch_size) ## samples.shape[0]=Ndataset + batchsize
     bcount = 0
     counter=0
-    #TODO: stop gradient
     samples = tf.stop_gradient(samples) # ?
 
     ept = tf.random.shuffle(samples)
@@ -507,16 +528,25 @@ for j in range(j_init,MAX_LENGTH-1):
 
                 l = train_step(flip,co,gtype)
 
-                samp,llpp = sample(100000) # get samples from the mode
+                #samp,llpp = sample(100000) # get samples from the mode
+                samp,llpp = sample(10000) # get samples from the mode
 
-                np.savetxt('./samples/samplex_'+str(epoch)+'_iteration_'+str(idx)+'.txt',samp+1,fmt='%i')
-                np.savetxt('./samples/logP_'+str(epoch)+'_iteration_'+str(idx)+'.txt',llpp)
-                #cFid, cFidError, KL, KLError = mps.cFidelity(tf.cast(samp,dtype=tf.int64),llpp)
+                #np.savetxt('./samples/samplex_'+str(epoch)+'_iteration_'+str(idx)+'.txt',samp+1,fmt='%i')
+                #np.savetxt('./samples/logP_'+str(epoch)+'_iteration_'+str(idx)+'.txt',llpp)
+                cFid, cFidError, KL, KLError = mps.cFidelity(tf.cast(samp,dtype=tf.int64),llpp)
+                Fid, FidErrorr = mps.Fidelity(tf.cast(samp,dtype=tf.int64))
+                print('cFid: ', cFid, cFidError,Fid, FidErrorr)
 
-                #print(epoch,idx,l)
-                #a = (np.array(list(it.product(range(4), repeat = 2)),dtype=np.uint8))
-                #l = np.sum(np.exp(logP(a)  ))
-                #print("prob",l)
+                prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size))
+                pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
+                cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
+                Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
+                print('cFid2: ', cFid2, Fid2)
+
+                print(epoch,idx,l)
+                a = (np.array(list(it.product(range(4), repeat = 2)),dtype=np.uint8))
+                l = np.sum(np.exp(logP(a)  ))
+                print("prob",l)
 
 
 #samples,lnP = sample(Ndataset)
@@ -538,3 +568,19 @@ Fid, FidErrorr = mps.Fidelity(tf.cast(samples,dtype=tf.int64))
 stabilizers,sError = mps.stabilizers_samples(tf.cast(samples,dtype=tf.int64))
 print(cFid, cFidError,Fid, FidErrorr)
 #print(stabilizers,sError,np.mean(stabilizers),np.mean(sError))
+
+# calssical fidelity in vector form
+#prob = ncon((pho,povm.M),([1,2],[-1,2,1]))
+#prob_povm = np.exp(povm.bias)
+#pho_povm = ncon((prob_povm,povm.Nt),([1],[1,-1,-2]))
+
+prob = ncon((pho,povm.Mn),([1,2],[-1,2,1]))
+prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size))
+pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
+cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
+Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
+print(cFid2, Fid2)
+
+
+
+
