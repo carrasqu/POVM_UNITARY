@@ -312,6 +312,8 @@ def create_masks(inp, tar):
 
 
 
+### Utilz (this part could be separted later)
+
 def sample(ansatz,Nsamples=1000):
 
   MAX_LENGTH = ansatz.decoder.max_length

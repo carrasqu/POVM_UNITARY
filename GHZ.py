@@ -19,7 +19,7 @@ def flip2(S,O,K,site):
     #Coef = O[S[:,site[0]],S[:,site[1]],:,:]
     Coef  = np.reshape(np.transpose(Coef[:,:,:],(2,0,1)),(Ns*K**2)) # reshapes so that both Coef and flipped have the same dim
     # transform samples to one hot vector
-    flipped = np.squeeze(np.reshape(np.eye(K)[flipped],[flipped.shape[0],N*K]).astype(np.uint8))
+    flipped = np.squeeze(np.reshape(np.eye(K)[flipped],[flipped.shape[0],N*K]).astype(np.uint8)) ## this is to convert flipped into onehot encoding; flipped.shape[0] is batchsize
     #print(np.count_nonzero(np.abs(Coef) > 0.00000000001),Coef.shape[0], np.count_nonzero(np.abs(Coef) > 0.00000000001)/Nsamples)
     return flipped, Coef
 

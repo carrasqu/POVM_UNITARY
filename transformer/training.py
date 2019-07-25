@@ -14,6 +14,10 @@ import os
 from transformer2 import *
 
 
+if not os.path.exists("samples"):
+    os.makedirs("samples")
+if not os.path.exists("models"):
+    os.makedirs("models")
 
 ### Parameters setting
 num_layers = 2 #4
@@ -21,18 +25,17 @@ d_model = 128 #128
 dff = 128 # 512
 num_heads = 4 # 8
 
-
-batch_size = 1000
-
 target_vocab_size = 4 # number of measurement outcomes
 input_vocab_size = target_vocab_size
 dropout_rate = 0.0
 
+batch_size = 1000
 MAX_LENGTH = 2 # number of qubits
 povm_='4Pauli'
 povm = POVM(POVM=povm_, Number_qubits=MAX_LENGTH)
 mps = MPS(POVM=povm_,Number_qubits=MAX_LENGTH,MPS="Graph")
 bias = povm.getinitialbias("+")
+LOAD = int(1)
 
 # define target state
 psi = 1/2.0 * np.array([1.,1.,1.,-1], dtype=complex)
@@ -44,14 +47,29 @@ prob = ncon((pho,povm.Mn),([1,2],[-1,2,1]))
 EPOCHS = 1 ##20
 j_init = 0
 Ndataset = 4000 ## 100000
+
+# define ansatz
 ansatz = Transformer(num_layers, d_model, MAX_LENGTH, num_heads, dff,
                           input_vocab_size, target_vocab_size, dropout_rate,bias)
 
+if LOAD==1:
+  print('load model')
+  ansatz.load_weights('./models/transformer2')
 
+# starting fidelity
+print('starting fidelity')
+prob = ncon((pho,povm.Mn),([1,2],[-1,2,1]))
+prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size, ansatz))
+pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
+cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
+Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
+print(cFid2, Fid2)
+
+
+# define training setting
 learning_rate = CustomSchedule(d_model)
 #optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98,
 #                                     epsilon=1e-9)
-
 optimizer = tf.keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.98,
                                      epsilon=1e-9)
 
@@ -68,13 +86,6 @@ def train_step(flip,co,gtype, ansatz):
 
     return loss
 
-
-
-#sys.exit(0)
-
-
-if not os.path.exists("samples"):
-    os.makedirs("samples")
 
 ## site [j,j+1] > epoch > nsteps = Ndataset/batchsize
 for j in range(j_init,MAX_LENGTH-1):
@@ -141,6 +152,10 @@ for j in range(j_init,MAX_LENGTH-1):
                 a = (np.array(list(it.product(range(4), repeat = 2)),dtype=np.uint8))
                 l = np.sum(np.exp(logP(a, ansatz)))
                 print("prob",l)
+
+
+ansatz.save_weights('./models/transformer2', save_format='tf')
+
 
 
 #samples,lnP = sample(Ndataset)
