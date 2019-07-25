@@ -158,9 +158,9 @@ class DecoderLayer(tf.keras.layers.Layer):
 
     self.ffn = point_wise_feed_forward_network(d_model, dff)
 
-    #self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+    self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
     #self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-    #self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+    self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
     #self.layernorm1 = tf.keras.layers.experimental.LayerNormalization(epsilon=1e-6) ## uncomment
     #self.layernorm2 = tf.keras.layers.experimental.LayerNormalization(epsilon=1e-6)
     #self.layernorm3 = tf.keras.layers.experimental.LayerNormalization(epsilon=1e-6) ## uncomment
@@ -184,7 +184,7 @@ class DecoderLayer(tf.keras.layers.Layer):
     out1 = attn1 + x
     s = tf.shape(out1)
     out1 = tf.reshape(out1,[s[0]*s[1],s[2]])
-    #out1 = self.layernorm1(out1) ## uncomment
+    out1 = self.layernorm1(out1) ## uncomment
     out1 = tf.reshape(out1,[s[0],s[1],s[2]])
     #print("out1 w1",out1[:,0,:],"out1 w2",out1[:,1,:])
     #attn2, attn_weights_block2 = self.mha2(
@@ -200,7 +200,7 @@ class DecoderLayer(tf.keras.layers.Layer):
     out3 = ffn_output + out1
     s = tf.shape(out3)
     out3 = tf.reshape(out3,[s[0]*s[1],s[2]])
-    #out3 = self.layernorm1(out3) ## uncomment
+    out3 = self.layernorm1(out3) ## uncomment
     out3 = tf.reshape(out3,[s[0],s[1],s[2]])
     #out3 = self.layernorm3(ffn_output)
 
@@ -208,15 +208,17 @@ class DecoderLayer(tf.keras.layers.Layer):
 
 
 class Decoder(tf.keras.layers.Layer):
-  def __init__(self, num_layers, d_model, num_heads, dff, target_vocab_size,
+  def __init__(self, num_layers, d_model, max_length, num_heads, dff, target_vocab_size,
                rate=0.1):
     super(Decoder, self).__init__()
 
     self.d_model = d_model
     self.num_layers = num_layers
+    self.max_length = max_length
+    self.target_vocab_size = target_vocab_size
 
     self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model)
-    self.pos_encoding = positional_encoding(MAX_LENGTH, self.d_model)
+    self.pos_encoding = positional_encoding(max_length, self.d_model)
 
     self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate)
                        for _ in range(num_layers)]
@@ -246,14 +248,14 @@ class Decoder(tf.keras.layers.Layer):
 
 
 class Transformer(tf.keras.Model):
-  def __init__(self, num_layers, d_model, num_heads, dff, input_vocab_size,
+  def __init__(self, num_layers, d_model, max_length, num_heads, dff, input_vocab_size,
                target_vocab_size, rate=0.1,bias='zeros'):
     super(Transformer, self).__init__()
 
     #self.encoder = Encoder(num_layers, d_model, num_heads, dff,
     #                       input_vocab_size, rate)
 
-    self.decoder = Decoder(num_layers, d_model, num_heads, dff,
+    self.decoder = Decoder(num_layers, d_model, max_length, num_heads, dff,
                            target_vocab_size, rate)
 
     #self.final_layer = tf.keras.layers.Dense(target_vocab_size)
@@ -274,7 +276,7 @@ class Transformer(tf.keras.Model):
     return final_output, attention_weights
 
 
-#TODO: why change learning rate
+#this is from the original Transformer paper
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
   def __init__(self, d_model, warmup_steps=4000):
     super(CustomSchedule, self).__init__()
@@ -310,49 +312,11 @@ def create_masks(inp, tar):
 
 
 
-### Parameters setting
-num_layers = 2 #4
-d_model = 128 #128
-dff = 128 # 512
-num_heads = 4 # 8
+def sample(ansatz,Nsamples=1000):
 
-
-batch_size = 1000
-
-target_vocab_size = 4 # number of measurement outcomes
-input_vocab_size = target_vocab_size
-dropout_rate = 0.0
-
-MAX_LENGTH = 2 # number of qubits
-povm_='4Pauli'
-povm = POVM(POVM=povm_, Number_qubits=MAX_LENGTH)
-mps = MPS(POVM=povm_,Number_qubits=MAX_LENGTH,MPS="Graph")
-bias = povm.getinitialbias("+")
-
-# define target state
-psi = 1/2.0 * np.array([1.,1.,1.,-1], dtype=complex)
-#psi = 1/np.sqrt(2.0) * np.array([1.,1.], dtype=complex)
-pho = np.outer(psi, np.conjugate(psi))
-prob = ncon((pho,povm.Mn),([1,2],[-1,2,1]))
-
-
-EPOCHS = 3 ##20
-j_init = 0
-Ndataset = 4000 ## 100000
-
-transformer = Transformer(num_layers, d_model, num_heads, dff,
-                          input_vocab_size, target_vocab_size, dropout_rate,bias)
-
-
-learning_rate = CustomSchedule(d_model)
-
-#optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98,
-#                                     epsilon=1e-9)
-
-optimizer = tf.keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.98,
-                                     epsilon=1e-9)
-
-def sample(Nsamples=1000):
+  MAX_LENGTH = ansatz.decoder.max_length
+  d_model = ansatz.decoder.d_model
+  target_vocab_size = ansatz.decoder.target_vocab_size
 
   encoder_input = tf.ones([Nsamples,MAX_LENGTH,d_model]) #(inp should be? bsize, sequence_length, d_model)
   output = tf.zeros([Nsamples,1])
@@ -364,7 +328,7 @@ def sample(Nsamples=1000):
         encoder_input, output)
 
     # predictions.shape == (batch_size, seq_len, vocab_size)
-    predictions, attention_weights = transformer(output, # self, tar, training,look_ahead_mask
+    predictions, attention_weights = ansatz(output, # self, tar, training,look_ahead_mask
                                                  False,
                                                  None)
     #if i == MAX_LENGTH-1:
@@ -394,7 +358,11 @@ def sample(Nsamples=1000):
   #print(logP)
   return output,logP #, attention_weights
 
-def logP(config,training=False):
+def logP(config,ansatz, training=False):
+
+  MAX_LENGTH = ansatz.decoder.max_length
+  d_model = ansatz.decoder.d_model
+  target_vocab_size = ansatz.decoder.target_vocab_size
 
   Nsamples =  tf.shape(config)[0]
   encoder_input = tf.ones([Nsamples,MAX_LENGTH,d_model]) #(inp should be? bsize, sequence_length, d_model)
@@ -406,7 +374,7 @@ def logP(config,training=False):
         encoder_input, output)
 
   # predictions.shape == (batch_size, seq_len, vocab_size) # self, tar, training,look_ahead_mask
-  predictions, attention_weights = transformer(output,training,combined_mask)
+  predictions, attention_weights = ansatz(output,training,combined_mask)
 
   # predictions (Nsamples/b_size, MAX_LENGTH,vocab_size)
   # print(predictions)
@@ -441,17 +409,20 @@ def flip2_tf(S,O,K,site):
     return flipped,Coef #,indices
 
 
-def loss_function(flip,co,gtype):
+def loss_function(flip,co,gtype, ansatz):
+
+    target_vocab_size = ansatz.decoder.target_vocab_size
+
     f = tf.cond(tf.equal(gtype,1), lambda: target_vocab_size, lambda: target_vocab_size**2)
     c = tf.cast(flip, dtype=tf.int64) # c are configurations
-    lnP = logP(c,training=True)
+    lnP = logP(c,ansatz, training=True)
     #oh =  tf.one_hot(tf.cast(flip,tf.int32),depth=target_vocab_size)
     co = tf.cast(co,dtype = tf.float32)
     loss = -tf.cast(f,tf.float32)*tf.reduce_mean(co * lnP)
     return loss
 
 
-def vectorize(num_sites, K):
+def vectorize(num_sites, K, ansatz):
     l_basis = []
     for i in range(K**num_sites):
       basis_str = np.base_repr(i, base=K, padding=num_sites)[-num_sites:]
@@ -459,128 +430,7 @@ def vectorize(num_sites, K):
       #l_basis.append(basis_str)
     l_basis = np.array(l_basis)
     l_basis = tf.cast(l_basis, dtype=tf.int64)
-    lnP = logP(l_basis, training=False)
+    lnP = logP(l_basis, ansatz, training=False)
     return lnP
-
-
-@tf.function
-def train_step(flip,co,gtype):
-
-    with tf.GradientTape() as tape:
-        loss = loss_function(flip,co,gtype)
-
-    gradients = tape.gradient(loss, transformer.trainable_variables)
-    #print(gradients)
-    optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
-
-
-    return loss
-
-#sys.exit(0)
-
-
-if not os.path.exists("samples"):
-    os.makedirs("samples")
-
-## site [j,j+1] > epoch > nsteps = Ndataset/batchsize
-for j in range(j_init,MAX_LENGTH-1):
-
-    sites=[j,j+1] # on which sites to apply the gate
-    gate = povm.p_two_qubit[1] # CZ gate
-
-    if Ndataset != 0:
-        ## it ensures at least one batch size samples, since Ncall can be zero
-        Ncalls = Ndataset /batch_size
-        samples,lP = sample(batch_size) # get samples from the model
-        lP = np.reshape(lP,[-1,1]) ## not necessary
-
-        for k in range(int(Ncalls)):
-            sa,llpp = sample(batch_size)
-            samples = np.vstack((samples,sa))
-            llpp =np.reshape(llpp,[-1,1])
-            lP =  np.vstack((lP,llpp))
-
-    gtype = 2 # 2-qubit gate
-
-    nsteps = int(samples.shape[0] / batch_size) ## samples.shape[0]=Ndataset + batchsize
-    bcount = 0
-    counter=0
-    samples = tf.stop_gradient(samples) # ?
-
-    ept = tf.random.shuffle(samples)
-
-
-    for epoch in range(EPOCHS):
-
-            print("epoch", epoch,"out of ", EPOCHS,"site", j)
-            for idx in range(nsteps):
-
-                if bcount*batch_size + batch_size>=Ndataset:
-                    bcount=0
-                    ept = tf.random.shuffle(samples)
-
-                batch = ept[ bcount*batch_size: bcount*batch_size+batch_size,:]
-                bcount=bcount+1
-
-
-                flip,co = flip2_tf(batch,gate,target_vocab_size,sites)
-
-
-                l = train_step(flip,co,gtype)
-
-                #samp,llpp = sample(100000) # get samples from the mode
-                samp,llpp = sample(10000) # get samples from the mode
-
-                #np.savetxt('./samples/samplex_'+str(epoch)+'_iteration_'+str(idx)+'.txt',samp+1,fmt='%i')
-                #np.savetxt('./samples/logP_'+str(epoch)+'_iteration_'+str(idx)+'.txt',llpp)
-                cFid, cFidError, KL, KLError = mps.cFidelity(tf.cast(samp,dtype=tf.int64),llpp)
-                Fid, FidErrorr = mps.Fidelity(tf.cast(samp,dtype=tf.int64))
-                print('cFid: ', cFid, cFidError,Fid, FidErrorr)
-
-                prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size))
-                pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
-                cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
-                Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
-                print('cFid2: ', cFid2, Fid2)
-
-                print(epoch,idx,l)
-                a = (np.array(list(it.product(range(4), repeat = 2)),dtype=np.uint8))
-                l = np.sum(np.exp(logP(a)  ))
-                print("prob",l)
-
-
-#samples,lnP = sample(Ndataset)
-if Ndataset != 0:
-    Ncalls = Ndataset /batch_size
-    samples,lP = sample(batch_size) # get samples from the model
-    lP = np.reshape(lP,[-1,1])
-
-    for k in range(int(Ncalls)):
-        sa,llpp = sample(batch_size)
-        samples = np.vstack((samples,sa))
-        llpp =np.reshape(llpp,[-1,1])
-        lP =  np.vstack((lP,llpp))
-
-
-# classical fidelity
-cFid, cFidError, KL, KLError = mps.cFidelity(tf.cast(samples,dtype=tf.int64),lP)
-Fid, FidErrorr = mps.Fidelity(tf.cast(samples,dtype=tf.int64))
-stabilizers,sError = mps.stabilizers_samples(tf.cast(samples,dtype=tf.int64))
-print(cFid, cFidError,Fid, FidErrorr)
-#print(stabilizers,sError,np.mean(stabilizers),np.mean(sError))
-
-# calssical fidelity in vector form
-#prob = ncon((pho,povm.M),([1,2],[-1,2,1]))
-#prob_povm = np.exp(povm.bias)
-#pho_povm = ncon((prob_povm,povm.Nt),([1],[1,-1,-2]))
-
-prob = ncon((pho,povm.Mn),([1,2],[-1,2,1]))
-prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size))
-pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
-cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
-Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
-print(cFid2, Fid2)
-
-
 
 
