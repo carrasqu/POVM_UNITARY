@@ -5,6 +5,21 @@ from ncon import ncon
 from copy import deepcopy
 from scipy.linalg import expm
 
+
+def basis(num_sites, base=2):
+  l_basis = []
+  for i in range(base**num_sites):
+    basis_str = np.base_repr(i, base=base, padding=num_sites)[-num_sites:]
+    l_basis.append(np.array(list(basis_str), dtype=int))
+    #l_basis.append(basis_str)
+  l_basis = np.array(l_basis)
+  return l_basis
+
+def index(one_basis, base=2):
+  return int(''.join(map(lambda x: str(int(x)), one_basis)), base)
+
+
+
 class POVM():
     def __init__(self, POVM='4Pauli',Number_qubits=4,initial_state='+',Jz=1.0,hx=1.0,eps=0.0001):
 
@@ -38,8 +53,6 @@ class POVM():
         self.two_qubit = [self.cnot, self.cz, self.cy, self.cu1]
 
 
-        # Tetra POVM
-                # Tetra POVM
         if POVM=='4Pauli':
             self.K = 4;
 
@@ -52,7 +65,7 @@ class POVM():
                                      0.5*np.array([[1, -1],[-1, 1]]) \
                                    + 0.5*np.array([[1, 1j],[-1j, 1]]) )
 
-        if POVM=='Tetra':
+        if POVM=='Tetra': ## symmetric
             self.K=4;
 
             self.M=np.zeros((self.K,2,2),dtype=complex);
@@ -121,6 +134,40 @@ class POVM():
             self.p_two_qubit2.append(mat2)
             #print(np.real(np.sum(np.reshape(self.p_two_qubit[i],(16,16)),1)),np.real(np.sum(np.reshape(self.p_two_qubit[i],(16,16)),0)))
 
+        # set initial wavefunction
+        if initial_state=='0':
+            self.s = np.array([1,0])
+        elif initial_state=='1':
+            self.s = np.array([0,1])
+        elif initial_state=='+':
+            self.s = (1.0/np.sqrt(2.0))*np.array([1,1])
+        elif initial_state=='-':
+            self.s = (1.0/np.sqrt(2.0))*np.array([1,-1])
+        elif initial_state=='r':
+            self.s = (1.0/np.sqrt(2.0))*np.array([1,1j])
+        elif initial_state=='l':
+            self.s = (1.0/np.sqrt(2.0))*np.array([1,-1j])
+
+        self.psi = self.s.copy()
+        for i in range(self.N-1):
+          self.psi = np.kron(self.psi, self.s)
+
+        # set Hamiltonian
+        self.ham = np.zeros((2**self.N,2**self.N), dtype=complex)
+        l_basis = basis(self.N)
+        for i in range(2**self.N):
+          for j in range(self.N-1):
+            self.ham[i, i] += - self.Jz *l_basis[i, j] * l_basis[i, j+1]
+            hop_basis = l_basis[i,:].copy()
+            hop_basis[j] =  int(abs(1-hop_basis[j]))
+            i_hop = index(hop_basis)
+            self.ham[i, i_hop] = -self.hx * 0.5
+          hop_basis = l_basis[i,:].copy()
+          hop_basis[self.N-1] =  int(abs(1-hop_basis[self.N-1]))
+          i_hop = index(hop_basis)
+          self.ham[i, i_hop] = -self.hx * 0.5
+
+
 
         # time evolution gate
         self.hl = self.Jz*np.kron(self.Z,self.Z) #+ self.Jz*np.kron(self.Y,self.Y)
@@ -130,10 +177,10 @@ class POVM():
 
         self.sx = np.reshape(0.5*np.kron(self.X,self.I)+ 0.5*np.kron(self.I,self.X),(2,2,2,2))
 
-        self.mat = np.reshape(-self.eps*self.hl,(4,4))
-        self.mat = expm(self.mat)
+        self.exp_hl = np.reshape(-self.eps*self.hl,(4,4))
+        self.exp_hl = expm(self.exp_hl)
 
-        self.mat = np.reshape(self.mat,(2,2,2,2))
+        self.mat = np.reshape(self.exp_hl,(2,2,2,2))
 
 
         self.Up = ncon((self.M,self.M,self.mat,self.M,self.M,self.it,self.it,np.conj(self.mat)),([-1,9,1],[-2,10,2],[1,2,3,4],[5,3,7],[6,4,8],[5,-3],[6,-4],[9,10,7,8]))
@@ -150,21 +197,8 @@ class POVM():
 
 
     def getinitialbias(self,initial_state):
-        # which initial product state?
-        if initial_state=='0':
-            s = np.array([1,0])
-        elif initial_state=='1':
-            s = np.array([0,1])
-        elif initial_state=='+':
-            s = (1.0/np.sqrt(2.0))*np.array([1,1])
-        elif initial_state=='-':
-            s = (1.0/np.sqrt(2.0))*np.array([1,-1])
-        elif initial_state=='r':
-            s = (1.0/np.sqrt(2.0))*np.array([1,1j])
-        elif initial_state=='l':
-            s = (1.0/np.sqrt(2.0))*np.array([1,-1j])
 
-        self.P = np.real(ncon((self.M,s,np.conj(s)),([-1,1,2],[1],[2])))
+        self.P = np.real(ncon((self.M,self.s,np.conj(self.s)),([-1,1,2],[1],[2])))
 
         # solving for bias
         self.bias = np.zeros(self.K)
@@ -176,7 +210,12 @@ class POVM():
            return self.bias
 
 
-
+    def ham_eigh(self):
+      w, v = np.linalg.eigh(self.ham)
+      ind = np.argmin(w)
+      E = w[ind]
+      psi_g = v[:, ind]
+      return psi_g, E
 
 
 
