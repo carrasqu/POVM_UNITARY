@@ -46,7 +46,7 @@ povm = POVM(POVM=povm_, Number_qubits=MAX_LENGTH, initial_state='+',Jz=1.0,hx=1.
 bias = povm.getinitialbias("+")
 
 # define target state
-psi = 1/2.0 * np.array([1.,1.,1.,-1], dtype=complex)
+#psi = 1/2.0 * np.array([1.,1.,1.,-1], dtype=complex)
 psi, E = povm.ham_eigh()
 pho = np.outer(psi, np.conjugate(psi))
 prob = ncon((pho,povm.Mn),([1,2],[-1,2,1]))
@@ -74,8 +74,8 @@ print(cFid2, Fid2)
 learning_rate = CustomSchedule(d_model)
 #optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98,
 #                                     epsilon=1e-9)
-optimizer = tf.keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.98,
-                                     epsilon=1e-9)
+optimizer = tf.keras.optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.98,
+                                     epsilon=1e-9) ## lr=1e-4
 
 @tf.function
 def train_step(flip,co,gtype, ansatz):
@@ -87,7 +87,7 @@ def train_step(flip,co,gtype, ansatz):
     #print(gradients)
     optimizer.apply_gradients(zip(gradients, ansatz.trainable_variables))
 
-    return loss
+    return loss, gradients
 
 Fidelity=[]
 for t in range(T):
@@ -96,7 +96,8 @@ for t in range(T):
 
       sites=[j,j+1] # on which sites to apply the gate
       #gate = povm.p_two_qubit[1] # CZ gate
-      gate = povm.Up # imaginary time evolution
+      #gate = povm.Up # imaginary time evolution
+      gate = povm.Up2 # imaginary time evolution
 
       if Ndataset != 0:
           ## it ensures at least one batch size samples, since Ncall can be zero
@@ -136,10 +137,10 @@ for t in range(T):
                   flip,co = flip2_tf(batch,gate,target_vocab_size,sites)
 
 
-                  l = train_step(flip,co,gtype, ansatz)
+                  loss,g = train_step(flip,co,gtype, ansatz)
 
                   #samp,llpp = sample(100000) # get samples from the mode
-                  samp,llpp = sample(ansatz,1000) # get samples from the mode
+                  #samp,llpp = sample(ansatz,1000) # get samples from the mode
 
                   #np.savetxt('./samples/samplex_'+str(epoch)+'_iteration_'+str(idx)+'.txt',samp+1,fmt='%i')
                   #np.savetxt('./samples/logP_'+str(epoch)+'_iteration_'+str(idx)+'.txt',llpp)
@@ -154,15 +155,17 @@ for t in range(T):
                   print('cFid2: ', cFid2, Fid2)
                   Fidelity.append(np.array([cFid2, Fid2]))
 
-                  print(epoch,idx,l)
+                  print('time:', t, 'epoch:', epoch, 'step:', idx)
+                  print('loss', loss)
                   a = (np.array(list(it.product(range(4), repeat = 2)),dtype=np.uint8))
                   l = np.sum(np.exp(logP(a, ansatz)))
                   print("prob",l)
 
 
   ansatz.save_weights('./models/transformer2', save_format='tf')
-  Fidelity = np.array(Fidelity)
-  np.savetxt('./data/Fidelity.txt',Fidelity)
+
+Fidelity = np.array(Fidelity)
+np.savetxt('./data/Fidelity.txt',Fidelity)
 
 
 

@@ -21,7 +21,7 @@ def index(one_basis, base=2):
 
 
 class POVM():
-    def __init__(self, POVM='4Pauli',Number_qubits=4,initial_state='+',Jz=1.0,hx=1.0,eps=0.0001):
+    def __init__(self, POVM='4Pauli',Number_qubits=4,initial_state='+',Jz=1.0,hx=1.0,eps=1e-4):
 
         self.N = Number_qubits;
         # Hamiltonian for calculation of energy (TFIM in 1d)
@@ -179,11 +179,15 @@ class POVM():
 
         self.exp_hl = np.reshape(-self.eps*self.hl,(4,4))
         self.exp_hl = expm(self.exp_hl)
+        self.exp_hl_norm = np.linalg.norm(self.exp_hl)
+        self.exp_hl2 = self.exp_hl / self.exp_hl_norm
 
         self.mat = np.reshape(self.exp_hl,(2,2,2,2))
+        self.mat2 = np.reshape(self.exp_hl2,(2,2,2,2))
 
 
         self.Up = ncon((self.M,self.M,self.mat,self.M,self.M,self.it,self.it,np.conj(self.mat)),([-1,9,1],[-2,10,2],[1,2,3,4],[5,3,7],[6,4,8],[5,-3],[6,-4],[9,10,7,8]))
+        self.Up2 = ncon((self.M,self.M,self.mat2,self.M,self.M,self.it,self.it,np.conj(self.mat2)),([-1,9,1],[-2,10,2],[1,2,3,4],[5,3,7],[6,4,8],[5,-3],[6,-4],[9,10,7,8]))
 
         #self.Up = np.reshape(np.transpose(np.reshape(self.Up,(self.K**2,self.K**2))),(self.K,self.K,self.K,self.K))
 
