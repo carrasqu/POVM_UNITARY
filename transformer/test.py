@@ -5,14 +5,14 @@ a = POVM(POVM='Tetra',Number_qubits=N, eps=1e-2)
 b = POVM(POVM='Tetra',Number_qubits=N, eps=1e2)
 
 # check dual frame correctness
-for i in range(N):
-  b1 = a.p_single_qubit[i] - a.p_single_qubit2[i]
-  b2 = a.p_two_qubit[i] - a.p_two_qubit2[i]
-  print(np.linalg.norm(b1))
-  print(np.linalg.norm(b2))
-  if np.linalg.norm(b1) >= 1e-14 and np.linalg.norm(b2) >= 1e-14:
-    assert False, 'dual frame test fails'
-print('pass dual frame test')
+#for i in range(N):
+#  b1 = a.p_single_qubit[i] - a.p_single_qubit2[i]
+#  b2 = a.p_two_qubit[i] - a.p_two_qubit2[i]
+#  print(np.linalg.norm(b1))
+#  print(np.linalg.norm(b2))
+#  if np.linalg.norm(b1) >= 1e-14 and np.linalg.norm(b2) >= 1e-14:
+#    assert False, 'dual frame test fails'
+#print('pass dual frame test')
 
 
 # construct 4 qubit wave function and reshape its tensor form
@@ -88,3 +88,13 @@ Et = np.conjugate(psi_t.transpose()) @ a.ham @ psi_t
 fidelity = np.abs(np.dot(psi_t,psi_g))
 print('full imaginary time fidelity:', fidelity)
 print('full imaginary time energy diff:', Et-E)
+
+
+# check dual frame correctness
+Up2 = a.two_body_gate(a.mat2)
+print('dual frame works:', np.linalg.norm(Up2-a.Up2)<1e-14)
+for i in range(4):
+  g1 = a.one_body_gate(a.single_qubit[i])
+  g2 = a.two_body_gate(a.two_qubit[i])
+  print('dual frame works:', np.linalg.norm(g1-a.p_single_qubit[i])<1e-14)
+  print('dual frame works:', np.linalg.norm(g2-a.p_two_qubit[i])<1e-14)

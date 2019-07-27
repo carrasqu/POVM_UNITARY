@@ -321,7 +321,7 @@ def sample(ansatz,Nsamples=1000):
   target_vocab_size = ansatz.decoder.target_vocab_size
 
   encoder_input = tf.ones([Nsamples,MAX_LENGTH,d_model]) #(inp should be? bsize, sequence_length, d_model)
-  output = tf.zeros([Nsamples,1])
+  output = tf.zeros([Nsamples,1], dtype=tf.int32)
   logP = tf.zeros([Nsamples,1])
 
   for i in range(MAX_LENGTH):
@@ -340,7 +340,7 @@ def sample(ansatz,Nsamples=1000):
 
     predictions = tf.reshape(predictions,[-1,target_vocab_size])  # (batch_size, 1, vocab_size)
 
-    predicted_id = tf.random.categorical(predictions,1) # sample the conditional distribution
+    predicted_id = tf.random.categorical(predictions,1, dtype=tf.int32) # sample the conditional distribution
 
     lp = tf.math.log(tf.nn.softmax(predictions,axis=1)+1e-10)
 
@@ -350,14 +350,14 @@ def sample(ansatz,Nsamples=1000):
 
     logP = logP + preclp
 
-    output = tf.concat([output, tf.cast(predicted_id,dtype=tf.float32)], axis=1)
+    output = tf.concat([output, tf.cast(predicted_id,dtype=tf.int32)], axis=1)
 
   output = tf.slice(output, [0, 1], [-1, -1]) # Cut the input of the initial call (zeros)
 
-  oh = tf.one_hot(tf.cast(output,dtype=tf.int64),target_vocab_size) # one hot vector of the sample
-
+  #oh = tf.one_hot(tf.cast(output,dtype=tf.int32),target_vocab_size) # one hot vector of the sample
   #logP = tf.reduce_sum(logP*oh,[1,2]) # the log probability of the configuration
   #print(logP)
+
   return output,logP #, attention_weights
 
 def logP(config,ansatz, training=False):
@@ -383,8 +383,6 @@ def logP(config,ansatz, training=False):
   logP = tf.math.log(tf.nn.softmax(predictions,axis=2)+1e-10)
   #print(logP[:,0,:],logP.shape,"config+0",output)
   oh = tf.one_hot(config,target_vocab_size)
-  print(logP.shape)
-  print(oh.shape)
   logP = tf.reduce_sum(logP*oh,[1,2])
 
   return logP #, attention_weights
@@ -396,7 +394,7 @@ def flip2_tf(S,O,K,site):
     Ns = tf.shape(S)[0] ## batch size
     N  = tf.shape(S)[1] ## Nqubit
     flipped = tf.reshape(tf.keras.backend.repeat(S, K**2),(Ns*K**2,N)) ## repeat is to prepare K**2 outcome after O adds on, after reshape it has shape (batchsize * 16, Nqubit)
-    a = tf.constant(np.array(list(it.product(range(K), repeat = 2)),dtype=np.float32)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
+    a = tf.constant(np.array(list(it.product(range(K), repeat = 2)),dtype=np.int32)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
     s0 = flipped[:,site[0]]
     s1 = flipped[:,site[1]]
     a0 = tf.reshape(tf.tile(a[:,0],[Ns]),[-1]) ## tf.tile repeasts tensor Ns times
@@ -423,7 +421,7 @@ def flip2_tf2(S,O,K,site):
     flipped = tf.reshape(tf.keras.backend.repeat(S, K**2),(Ns*K**2,N)) ## repeat is to prepare K**2 outcome after O adds on, after reshape it has shape (batchsize * 16, Nqubit)
     s0 = flipped[:,site[0]]
     s1 = flipped[:,site[1]]
-    a = tf.constant(np.array(list(it.product(range(K), repeat = 2)),dtype=np.float32)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
+    a = tf.constant(np.array(list(it.product(range(K), repeat = 2)),dtype=np.int32)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
     a = tf.tile(a,[Ns,1])
     indices_ = tf.cast(tf.concat([a,tf.reshape(s0,[tf.shape(s0)[0],1]),tf.reshape(s1,[tf.shape(s1)[0],1])],1),tf.int32)
 
@@ -435,9 +433,7 @@ def flip2_tf2(S,O,K,site):
 
     ##getting the coefficients of the p-gates that accompany the flipped samples ## (Nq,Nq,Nq,Nq) shape for index
     Coef = tf.gather_nd(O,indices_) ## O has to be tensor form
-    ## transform samples to one hot vector
-    #flipped = tf.one_hot(tf.cast(flipped,tf.int32),depth=K)
-    #flipped = tf.reshape(flipped,[tf.shape(flipped)[0],tf.shape(flipped)[1]*tf.shape(flipped)[2]])
+
     return flipped,Coef #,indices
 
 
@@ -446,10 +442,10 @@ def loss_function(flip,co,gtype, ansatz):
     target_vocab_size = ansatz.decoder.target_vocab_size
 
     f = tf.cond(tf.equal(gtype,1), lambda: target_vocab_size, lambda: target_vocab_size**2)
-    c = tf.cast(flip, dtype=tf.int64) # c are configurations
+    c = tf.cast(flip, dtype=tf.int32) # c are configurations
     lnP = logP(c,ansatz, training=True)
     #oh =  tf.one_hot(tf.cast(flip,tf.int32),depth=target_vocab_size)
-    co = tf.cast(co,dtype = tf.float32)
+    #co = tf.cast(co,dtype = tf.float32)
     loss = -tf.cast(f,tf.float32)*tf.reduce_mean(co * lnP)
     return loss
 
@@ -461,7 +457,7 @@ def vectorize(num_sites, K, ansatz):
       l_basis.append(np.array(list(basis_str), dtype=int))
       #l_basis.append(basis_str)
     l_basis = np.array(l_basis)
-    l_basis = tf.cast(l_basis, dtype=tf.int64)
+    l_basis = tf.cast(l_basis, dtype=tf.int32)
     lnP = logP(l_basis, ansatz, training=False)
     return lnP
 

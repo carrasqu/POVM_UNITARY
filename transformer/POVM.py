@@ -117,21 +117,17 @@ class POVM():
 
         # probability gate set single qubit
         self.p_single_qubit = []
-        self.p_single_qubit2 = []
         for i in range(len(self.single_qubit)):
-            mat = ncon((self.M,self.single_qubit[i],self.M,self.it,np.transpose(np.conj(self.single_qubit[i]))),([-1,4,1],[1,2],[3,2,5],[3,-2],[5,4]))
-            mat2 = ncon((self.M,self.single_qubit[i],self.Nt,np.transpose(np.conj(self.single_qubit[i]))),([-1,4,1],[1,2],[-2,2,5],[5,4]))
-            self.p_single_qubit.append(mat)
-            self.p_single_qubit2.append(mat2)
+          #mat = ncon((self.M,self.single_qubit[i],self.M,self.it,np.transpose(np.conj(self.single_qubit[i]))),([-1,4,1],[1,2],[3,2,5],[3,-2],[5,4]))
+          mat = self.one_body_gate(self.single_qubit[i])
+          self.p_single_qubit.append(mat)
 
         # probability gate set two qubit
         self.p_two_qubit = []
-        self.p_two_qubit2 = []
         for i in range(len(self.two_qubit)):
-            mat = ncon((self.M,self.M,self.two_qubit[i],self.M,self.M,self.it,self.it,np.conj(self.two_qubit[i])),([-1,9,1],[-2,10,2],[1,2,3,4],[5,3,7],[6,4,8],[5,-3],[6,-4],[9,10,7,8]))
-            mat2 = ncon((self.M,self.M,self.two_qubit[i],self.Nt,self.Nt,np.conj(self.two_qubit[i])),([-1,9,1],[-2,10,2],[1,2,3,4],[-3,3,7],[-4,4,8],[9,10,7,8]))
-            self.p_two_qubit.append(mat)
-            self.p_two_qubit2.append(mat2)
+          #mat = ncon((self.M,self.M,self.two_qubit[i],self.M,self.M,self.it,self.it,np.conj(self.two_qubit[i])),([-1,9,1],[-2,10,2],[1,2,3,4],[5,3,7],[6,4,8],[5,-3],[6,-4],[9,10,7,8]))
+          mat = self.two_body_gate(self.two_qubit[i])
+          self.p_two_qubit.append(mat)
             #print(np.real(np.sum(np.reshape(self.p_two_qubit[i],(16,16)),1)),np.real(np.sum(np.reshape(self.p_two_qubit[i],(16,16)),0)))
 
         # set initial wavefunction
@@ -185,14 +181,16 @@ class POVM():
         self.mat = np.reshape(self.exp_hl,(2,2,2,2))
         self.mat2 = np.reshape(self.exp_hl2,(2,2,2,2))
 
+        self.Up = self.two_body_gate(self.mat)
+        self.Up2 = self.two_body_gate(self.mat2)
 
-        self.Up = ncon((self.M,self.M,self.mat,self.M,self.M,self.it,self.it,np.conj(self.mat)),([-1,9,1],[-2,10,2],[1,2,3,4],[5,3,7],[6,4,8],[5,-3],[6,-4],[9,10,7,8]))
-        self.Up2 = ncon((self.M,self.M,self.mat2,self.M,self.M,self.it,self.it,np.conj(self.mat2)),([-1,9,1],[-2,10,2],[1,2,3,4],[5,3,7],[6,4,8],[5,-3],[6,-4],[9,10,7,8]))
+        #self.Up = ncon((self.M,self.M,self.mat,self.M,self.M,self.it,self.it,np.conj(self.mat)),([-1,9,1],[-2,10,2],[1,2,3,4],[5,3,7],[6,4,8],[5,-3],[6,-4],[9,10,7,8])).real
+        #self.Up2 = ncon((self.M,self.M,self.mat2,self.M,self.M,self.it,self.it,np.conj(self.mat2)),([-1,9,1],[-2,10,2],[1,2,3,4],[5,3,7],[6,4,8],[5,-3],[6,-4],[9,10,7,8])).real
 
         #self.Up = np.reshape(np.transpose(np.reshape(self.Up,(self.K**2,self.K**2))),(self.K,self.K,self.K,self.K))
 
-        self.hlp = ncon((self.it,self.M,self.hl,self.it,self.M),([1,-1],[1,3,2],[2,5,3,6],[4,-2],[4,6,5]))
-        self.sxp = ncon((self.it,self.M,self.sx,self.it,self.M),([1,-1],[1,3,2],[2,5,3,6],[4,-2],[4,6,5]))
+        #self.hlp = ncon((self.it,self.M,self.hl,self.it,self.M),([1,-1],[1,3,2],[2,5,3,6],[4,-2],[4,6,5])).real
+        #self.sxp = ncon((self.it,self.M,self.sx,self.it,self.M),([1,-1],[1,3,2],[2,5,3,6],[4,-2],[4,6,5])).real
 
 
     def softmax(self,x):
@@ -222,5 +220,11 @@ class POVM():
       return psi_g, E
 
 
+    def one_body_gate(self, gate):
+      g1 = ncon((self.M, gate, self.Nt,np.transpose(np.conj(gate))),([-1,4,1],[1,2],[-2,2,5],[5,4]))
+      return g1.real.astype('float32')
 
 
+    def two_body_gate(self, gate):
+      g2 = ncon((self.M,self.M, gate,self.Nt,self.Nt,np.conj(gate)),([-1,9,1],[-2,10,2],[1,2,3,4],[-3,3,7],[-4,4,8],[9,10,7,8]))
+      return g2.real.astype('float32')
