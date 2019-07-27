@@ -220,11 +220,17 @@ class POVM():
       return psi_g, E
 
 
-    def one_body_gate(self, gate):
+    def one_body_gate(self, gate, mask=True):
       g1 = ncon((self.M, gate, self.Nt,np.transpose(np.conj(gate))),([-1,4,1],[1,2],[-2,2,5],[5,4]))
+      if mask:
+        g1_mask = np.abs(g1.real) > 1e-15
+        g1 = np.multiply(g1, g1_mask)
       return g1.real.astype('float32')
 
 
-    def two_body_gate(self, gate):
+    def two_body_gate(self, gate, mask=True):
       g2 = ncon((self.M,self.M, gate,self.Nt,self.Nt,np.conj(gate)),([-1,9,1],[-2,10,2],[1,2,3,4],[-3,3,7],[-4,4,8],[9,10,7,8]))
+      if mask:
+        g2_mask = np.abs(g2.real) > 1e-15
+        g2 = np.multiply(g2, g2_mask)
       return g2.real.astype('float32')

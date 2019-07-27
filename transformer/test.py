@@ -93,8 +93,10 @@ print('full imaginary time energy diff:', Et-E)
 # check dual frame correctness
 Up2 = a.two_body_gate(a.mat2)
 print('dual frame works:', np.linalg.norm(Up2-a.Up2)<1e-14)
+p1=[]
+p2=[]
 for i in range(4):
-  g1 = a.one_body_gate(a.single_qubit[i])
-  g2 = a.two_body_gate(a.two_qubit[i])
-  print('dual frame works:', np.linalg.norm(g1-a.p_single_qubit[i])<1e-14)
-  print('dual frame works:', np.linalg.norm(g2-a.p_two_qubit[i])<1e-14)
+  p1.append(a.one_body_gate(a.single_qubit[i]))
+  p2.append(a.two_body_gate(a.two_qubit[i]))
+  print('dual frame works:', np.linalg.norm(p1[i]-a.p_single_qubit[i])<1e-14)
+  print('dual frame works:', np.linalg.norm(p2[i]-a.p_two_qubit[i])<1e-14)

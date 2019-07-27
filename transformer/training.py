@@ -49,6 +49,7 @@ bias = povm.getinitialbias("+")
 # define target state
 #psi = 1/2.0 * np.array([1.,1.,1.,-1], dtype=complex)
 psi, E = povm.ham_eigh()
+Ham = povm.ham
 pho = np.outer(psi, np.conjugate(psi))
 prob = ncon((pho,povm.Mn),([1,2],[-1,2,1]))
 
@@ -79,10 +80,10 @@ optimizer = tf.keras.optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.98,
                                      epsilon=1e-9) ## lr=1e-4
 
 @tf.function
-def train_step(flip,co,gtype, ansatz):
+def train_step(flip,co,gtype,batch_size,ansatz):
 
     with tf.GradientTape() as tape:
-        loss = loss_function(flip,co,gtype,ansatz)
+        loss = loss_function(flip,co,gtype,batch_size,ansatz)
 
     gradients = tape.gradient(loss, ansatz.trainable_variables)
     #print(gradients)
@@ -138,7 +139,7 @@ for t in range(T):
                   flip,co = flip2_tf(batch,gate,target_vocab_size,sites)
 
 
-                  loss = train_step(flip,co,gtype, ansatz)
+                  loss = train_step(flip,co,gtype,batch_size,ansatz)
 
                   #samp,llpp = sample(100000) # get samples from the mode
                   #samp,llpp = sample(ansatz,1000) # get samples from the mode
@@ -151,6 +152,8 @@ for t in range(T):
 
                   prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size, ansatz))
                   pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
+                  Et = np.trace(pho_povm @ Ham)
+                  print('exact E:', E, 'current E:', Et.real)
                   cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
                   Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
                   print('cFid2: ', cFid2, Fid2)
