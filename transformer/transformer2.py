@@ -383,6 +383,8 @@ def logP(config,ansatz, training=False):
   logP = tf.math.log(tf.nn.softmax(predictions,axis=2)+1e-10)
   #print(logP[:,0,:],logP.shape,"config+0",output)
   oh = tf.one_hot(config,target_vocab_size)
+  print(logP.shape)
+  print(oh.shape)
   logP = tf.reduce_sum(logP*oh,[1,2])
 
   return logP #, attention_weights
@@ -399,10 +401,38 @@ def flip2_tf(S,O,K,site):
     s1 = flipped[:,site[1]]
     a0 = tf.reshape(tf.tile(a[:,0],[Ns]),[-1]) ## tf.tile repeasts tensor Ns times
     a1 = tf.reshape(tf.tile(a[:,1],[Ns]),[-1])
+    ## flipped has shape (batch, Nqubit), this function is to replace flipped[batch, site0], flipped[batch, site1] with a0, a1 values
     flipped = slicetf.replace_slice_in(flipped)[:,site[0]].with_value(tf.reshape( a0 ,[K**2*Ns,1]))
     flipped = slicetf.replace_slice_in(flipped)[:,site[1]].with_value(tf.reshape( a1 ,[K**2*Ns,1]))
     a = tf.tile(a,[Ns,1])
     indices_ = tf.cast(tf.concat([a,tf.reshape(s0,[tf.shape(s0)[0],1]),tf.reshape(s1,[tf.shape(s1)[0],1])],1),tf.int32)
+    ##getting the coefficients of the p-gates that accompany the flipped samples ## (Nq,Nq,Nq,Nq) shape for index
+    Coef = tf.gather_nd(O,indices_) ## O has to be tensor form
+    ## transform samples to one hot vector
+    #flipped = tf.one_hot(tf.cast(flipped,tf.int32),depth=K)
+    #flipped = tf.reshape(flipped,[tf.shape(flipped)[0],tf.shape(flipped)[1]*tf.shape(flipped)[2]])
+    return flipped,Coef #,indices
+
+
+def flip2_tf2(S,O,K,site):
+  ## S: batch, O: gate, K: number of measurement outcomes, sites: [j,j+1]
+  ## S is not one-hot form
+    Ns = tf.shape(S)[0] ## batch size
+    N  = tf.shape(S)[1] ## Nqubit
+
+    flipped = tf.reshape(tf.keras.backend.repeat(S, K**2),(Ns*K**2,N)) ## repeat is to prepare K**2 outcome after O adds on, after reshape it has shape (batchsize * 16, Nqubit)
+    s0 = flipped[:,site[0]]
+    s1 = flipped[:,site[1]]
+    a = tf.constant(np.array(list(it.product(range(K), repeat = 2)),dtype=np.float32)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
+    a = tf.tile(a,[Ns,1])
+    indices_ = tf.cast(tf.concat([a,tf.reshape(s0,[tf.shape(s0)[0],1]),tf.reshape(s1,[tf.shape(s1)[0],1])],1),tf.int32)
+
+    a = tf.transpose(a, perm=[1,0])
+    flipped = tf.transpose(flipped,perm=[1,0])
+    ind = tf.constant([[site[0]], [site[1]]])
+    flipped = tf.tensor_scatter_nd_update(flipped, ind, a)
+    flipped = tf.transpose(flipped,perm=[1,0])
+
     ##getting the coefficients of the p-gates that accompany the flipped samples ## (Nq,Nq,Nq,Nq) shape for index
     Coef = tf.gather_nd(O,indices_) ## O has to be tensor form
     ## transform samples to one hot vector

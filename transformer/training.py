@@ -7,10 +7,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from POVM import POVM
 import itertools as it
-import slicetf
 from MPS import MPS
 import sys
 import os
+import time
+import timeit
 from transformer2 import *
 
 
@@ -87,7 +88,7 @@ def train_step(flip,co,gtype, ansatz):
     #print(gradients)
     optimizer.apply_gradients(zip(gradients, ansatz.trainable_variables))
 
-    return loss, gradients
+    return loss
 
 Fidelity=[]
 for t in range(T):
@@ -137,7 +138,7 @@ for t in range(T):
                   flip,co = flip2_tf(batch,gate,target_vocab_size,sites)
 
 
-                  loss,g = train_step(flip,co,gtype, ansatz)
+                  loss = train_step(flip,co,gtype, ansatz)
 
                   #samp,llpp = sample(100000) # get samples from the mode
                   #samp,llpp = sample(ansatz,1000) # get samples from the mode
@@ -157,9 +158,9 @@ for t in range(T):
 
                   print('time:', t, 'epoch:', epoch, 'step:', idx)
                   print('loss', loss)
-                  a = (np.array(list(it.product(range(4), repeat = 2)),dtype=np.uint8))
+                  a = np.array(list(it.product(range(4),repeat = MAX_LENGTH)), dtype=np.uint8)
                   l = np.sum(np.exp(logP(a, ansatz)))
-                  print("prob",l)
+                  print("prob", l)
 
 
   ansatz.save_weights('./models/transformer2', save_format='tf')
@@ -201,6 +202,35 @@ cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
 Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
 print(cFid2, Fid2)
 
+'''
+ff = flip + 0.
+ff2 = tf.transpose(ff,perm=[1,0])
+val = tf.constant(np.random.rand(16000,1),dtype=np.float32)
+val2 = tf.transpose(val,perm=[1,0])
+a1 = slicetf.replace_slice_in(ff)[:,1].with_value(val)
+ind = tf.constant([[1]])
+a2 = tf.tensor_scatter_nd_update(ff2, ind, val2)
+a2 = tf.transpose(a2, perm=[1,0])
 
+indices = tf.constant([[0], [2]])
+updates = tf.constant([[[5, 5, 5, 5], [6, 6, 6, 6],
+                        [7, 7, 7, 7], [8, 8, 8, 8]],
+                       [[15, 25, 25, 5], [26, 36, 46, 46],
+                        [17, 27, 27, 7], [28, 38, 48, 48]]],dtype=tf.float32)
+tensor = tf.ones([4, 4, 4])
+updated = tf.tensor_scatter_nd_update(tensor, indices, updates)
+'''
+
+## flip test
+t0=time.time()
+flip,co = flip2_tf(batch,gate,target_vocab_size,sites)
+t1=time.time()
+print(t1-t0)
+t0=time.time()
+flip2,co2 = flip2_tf2(batch,gate,target_vocab_size,sites)
+t1=time.time()
+print(t1-t0)
+print(np.linalg.norm(flip-flip2))
+print(np.linalg.norm(co-co2))
 
 

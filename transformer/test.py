@@ -1,7 +1,8 @@
 from POVM import *
 
 N = 2
-a = POVM(POVM='Tetra',Number_qubits=N)
+a = POVM(POVM='Tetra',Number_qubits=N, eps=1e-2)
+b = POVM(POVM='Tetra',Number_qubits=N, eps=1e2)
 
 # check dual frame correctness
 for i in range(N):
