@@ -152,38 +152,45 @@ cFid2 = np.dot(np.sqrt(prob_i), np.sqrt(prob_g))
 print('initial fidelity:', cFid2)
 
 
-config = tf.map_fn(lambda x: np.array(list(np.base_repr(int(x), base=2, padding=N)[-N:]),dtype=int) , tf.transpose(cat2))
+config = tf.map_fn(lambda x: np.array(list(np.base_repr(int(x), base=4, padding=N)[-N:]),dtype=int) , tf.transpose(cat2))
 config_prob = tf.map_fn(lambda x: prob_g[x], cat2[0], dtype=tf.float32)
 config_tmp = config + 0
 #log_P = logP(config, ansatz)
 
 # training
 optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
-mse_loss_fn = tf.keras.losses.MeanSquaredError()
+loss_k = tf.keras.losses.KLDivergence()
 
 
 def loss_test(config, config_prob,ansatz):
 
-    lnP = logP(config,ansatz, training=True)
-    #loss = -tf.reduce_sum(lnP)
-    loss = tf.reduce_mean(tf.abs(tf.exp(lnP)-config_prob))
-    return loss #, loss2
+	lnP = logP(config,ansatz,training=True)
+	loss = -tf.reduce_mean(lnP) # KL div
+	#loss = tf.reduce_mean(tf.abs(tf.exp(lnP)-config_prob))
+	#loss = loss_k(config_prob, tf.exp(lnP))
+	return loss #, loss2
 
 
 
 @tf.function
-def train_step(samples,ansatz):
+def train_step(samples,samples_p, ansatz):
 	with tf.GradientTape() as tape:
-		loss = loss_test(config, config_prob,ansatz)
+		loss = loss_test(samples, samples_p,ansatz)
 
 	gradients = tape.gradient(loss, ansatz.trainable_variables)
 	optimizer.apply_gradients(zip(gradients, ansatz.trainable_variables))
 	return loss
 
 
-for i in range(50):
-	loss_tr = train_step(config, ansatz)
+for i in range(10):
+	cat2 = tf.random.categorical(logits=log_prob, num_samples=int(1e4))
+	config = tf.map_fn(lambda x: np.array(list(np.base_repr(int(x), base=4, padding=N)[-N:]),dtype=int) , tf.transpose(cat2))
+	config_prob = tf.map_fn(lambda x: prob_g[x], cat2[0], dtype=tf.float32)
+
+	loss_tr = train_step(config, config_prob, ansatz)
+	prob_f = np.exp(logP(config_b, ansatz))
 	print(loss_tr)
+	print(np.sum(prob_f))
 
 #ansatz.compile(optimizer, loss=tf.keras.losses.MeanSquaredError())
 #ansatz.fit(config, config_prob, epochs=10, batch_size=1)
@@ -194,4 +201,6 @@ plt.figure(4)
 plt.bar(np.arange(4**N),prob_f)
 cFid2 = np.dot(np.sqrt(prob_f), np.sqrt(prob_g))
 print('final fidelity:', cFid2)
+s = np.dot(prob_g, np.log(prob_g))
+print('entropy:', s)
 
