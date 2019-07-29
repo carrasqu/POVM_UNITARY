@@ -144,25 +144,6 @@ class POVM():
         elif initial_state=='l':
             self.s = (1.0/np.sqrt(2.0))*np.array([1,-1j])
 
-        self.psi = self.s.copy()
-        for i in range(self.N-1):
-          self.psi = np.kron(self.psi, self.s)
-
-        # set Hamiltonian
-        self.ham = np.zeros((2**self.N,2**self.N), dtype=complex)
-        l_basis = basis(self.N)
-        for i in range(2**self.N):
-          for j in range(self.N-1):
-            self.ham[i, i] += - self.Jz *l_basis[i, j] * l_basis[i, j+1]
-            hop_basis = l_basis[i,:].copy()
-            hop_basis[j] =  int(abs(1-hop_basis[j]))
-            i_hop = index(hop_basis)
-            self.ham[i, i_hop] = -self.hx * 0.5
-          hop_basis = l_basis[i,:].copy()
-          hop_basis[self.N-1] =  int(abs(1-hop_basis[self.N-1]))
-          i_hop = index(hop_basis)
-          self.ham[i, i_hop] = -self.hx * 0.5
-
 
 
         # time evolution gate
@@ -211,6 +192,28 @@ class POVM():
         else:
            return self.bias
 
+    def construct_psi(self):
+      # initial wavefunction
+      self.psi = self.s.copy()
+      for i in range(self.N-1):
+        self.psi = np.kron(self.psi, self.s)
+
+
+    def construct_ham(self):
+      # set Hamiltonian
+      self.ham = np.zeros((2**self.N,2**self.N), dtype=complex)
+      l_basis = basis(self.N)
+      for i in range(2**self.N):
+        for j in range(self.N-1):
+          self.ham[i, i] += - self.Jz *l_basis[i, j] * l_basis[i, j+1]
+          hop_basis = l_basis[i,:].copy()
+          hop_basis[j] =  int(abs(1-hop_basis[j]))
+          i_hop = index(hop_basis)
+          self.ham[i, i_hop] = -self.hx * 0.5
+        hop_basis = l_basis[i,:].copy()
+        hop_basis[self.N-1] =  int(abs(1-hop_basis[self.N-1]))
+        i_hop = index(hop_basis)
+        self.ham[i, i_hop] = -self.hx * 0.5
 
     def ham_eigh(self):
       w, v = np.linalg.eigh(self.ham)

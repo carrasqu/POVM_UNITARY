@@ -2,7 +2,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from ncon import ncon
 
 import tensorflow as tf
-import time
 import numpy as np
 import matplotlib.pyplot as plt
 from POVM import POVM
@@ -48,10 +47,11 @@ bias = povm.getinitialbias("+")
 
 # define target state
 #psi = 1/2.0 * np.array([1.,1.,1.,-1], dtype=complex)
+povm.construct_psi()
+povm.construct_ham()
 psi, E = povm.ham_eigh()
-Ham = povm.ham
 pho = np.outer(psi, np.conjugate(psi))
-prob = ncon((pho,povm.Mn),([1,2],[-1,2,1]))
+prob = ncon((pho,povm.Mn),([1,2],[-1,2,1])).real
 
 
 # define ansatz
@@ -64,12 +64,17 @@ if LOAD==1:
 
 # starting fidelity
 print('starting fidelity')
-prob = ncon((pho,povm.Mn),([1,2],[-1,2,1]))
 prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size, ansatz))
 pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
 cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
 Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
 print(cFid2, Fid2)
+
+plt.figure(1)
+plt.bar(np.arange(4**MAX_LENGTH),prob)
+plt.figure(2)
+plt.bar(np.arange(4**MAX_LENGTH),prob_povm)
+
 
 
 # define training setting
@@ -152,7 +157,7 @@ for t in range(T):
 
                   prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size, ansatz))
                   pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
-                  Et = np.trace(pho_povm @ Ham)
+                  Et = np.trace(pho_povm @ povm.ham)
                   print('exact E:', E, 'current E:', Et.real)
                   cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
                   Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))

@@ -1,6 +1,12 @@
+from __future__ import absolute_import, division, print_function, unicode_literals
 from POVM import *
+from matplotlib import pyplot as plt
+from transformer2 import *
+import itertools as it
+import tensorflow as tf
 
-N = 2
+
+N = int(2)
 a = POVM(POVM='Tetra',Number_qubits=N, eps=1e-2)
 b = POVM(POVM='Tetra',Number_qubits=N, eps=1e2)
 
@@ -73,6 +79,8 @@ b2 = np.reshape(b2,(4,4))
 
 
 # test imaginary time evolution
+a.construct_ham()
+a.construct_psi()
 psi_t = a.psi.copy()
 psi_g, E = a.ham_eigh()
 diff = a.ham @ psi_g - E * psi_g
@@ -100,3 +108,90 @@ for i in range(4):
   p2.append(a.two_body_gate(a.two_qubit[i]))
   print('dual frame works:', np.linalg.norm(p1[i]-a.p_single_qubit[i])<1e-14)
   print('dual frame works:', np.linalg.norm(p2[i]-a.p_two_qubit[i])<1e-14)
+
+
+# sampling function
+psi_p = np.multiply(psi_g, np.conjugate(psi_g)).real
+log_psi = tf.math.log([psi_p+1e-13])
+cat = tf.random.categorical(logits=log_psi, num_samples=int(1e3))
+#plt.figure(1)
+#plt.hist(cat[0], bins=2**N, density=True)
+#plt.figure(2)
+#plt.bar(np.arange(2**N),psi_p)
+#plt.show()
+
+# convert to POVM probability
+pho_g = np.outer(psi_g, np.conjugate(psi_g))
+prob_g = ncon((pho_g,a.Mn),([1,2],[-1,2,1])).real
+log_prob = tf.math.log([prob_g+1e-13])
+cat2 = tf.random.categorical(logits=log_prob, num_samples=int(1e4))
+plt.figure(1)
+plt.hist(cat2[0], bins=4**N, density=True)
+plt.figure(2)
+plt.bar(np.arange(4**N),prob_g)
+#plt.show()
+
+num_layers = 2 #4
+d_model = 128 #128
+dff = 128 # 512
+num_heads = 4 # 8
+target_vocab_size = 4 # number of measurement outcomes
+input_vocab_size = target_vocab_size
+dropout_rate = 0.0
+MAX_LENGTH = N
+bias = a.getinitialbias("+")
+
+ansatz = Transformer(num_layers, d_model, MAX_LENGTH, num_heads, dff,input_vocab_size, target_vocab_size, dropout_rate,bias)
+
+config_b = np.array(list(it.product(range(4),repeat = MAX_LENGTH)), dtype=np.uint8)
+prob_i = np.exp(logP(config_b, ansatz))
+l = np.sum(np.exp(logP(config_b, ansatz)))
+plt.figure(3)
+plt.bar(np.arange(4**N),prob_i)
+cFid2 = np.dot(np.sqrt(prob_i), np.sqrt(prob_g))
+print('initial fidelity:', cFid2)
+
+
+config = tf.map_fn(lambda x: np.array(list(np.base_repr(int(x), base=2, padding=N)[-N:]),dtype=int) , tf.transpose(cat2))
+config_prob = tf.map_fn(lambda x: prob_g[x], cat2[0], dtype=tf.float32)
+config_tmp = config + 0
+#log_P = logP(config, ansatz)
+
+# training
+optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
+mse_loss_fn = tf.keras.losses.MeanSquaredError()
+
+
+def loss_test(config, config_prob,ansatz):
+
+    lnP = logP(config,ansatz, training=True)
+    #loss = -tf.reduce_sum(lnP)
+    loss = tf.reduce_mean(tf.abs(tf.exp(lnP)-config_prob))
+    return loss #, loss2
+
+
+
+@tf.function
+def train_step(samples,ansatz):
+	with tf.GradientTape() as tape:
+		loss = loss_test(config, config_prob,ansatz)
+
+	gradients = tape.gradient(loss, ansatz.trainable_variables)
+	optimizer.apply_gradients(zip(gradients, ansatz.trainable_variables))
+	return loss
+
+
+for i in range(50):
+	loss_tr = train_step(config, ansatz)
+	print(loss_tr)
+
+#ansatz.compile(optimizer, loss=tf.keras.losses.MeanSquaredError())
+#ansatz.fit(config, config_prob, epochs=10, batch_size=1)
+
+
+prob_f = np.exp(logP(config_b, ansatz))
+plt.figure(4)
+plt.bar(np.arange(4**N),prob_f)
+cFid2 = np.dot(np.sqrt(prob_f), np.sqrt(prob_g))
+print('final fidelity:', cFid2)
+
