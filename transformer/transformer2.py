@@ -484,18 +484,22 @@ def loss_function(flip,co,gtype,batch_size,ansatz):
     return loss #, loss2
 
 
-def loss_function2(flip,co,gtype,batch_lP,ansatz):
+def loss_function2(flip,co,gtype,batch,ansatz):
 
     target_vocab_size = ansatz.decoder.target_vocab_size
-    batch_size = batch_lP.shape[0]
+    batch_size = batch.shape[0]
 
     f = tf.cond(tf.equal(gtype,1), lambda: target_vocab_size, lambda: target_vocab_size**2)
+    samples = tf.cast(batch[:,:2], dtype=tf.uint8) # c are configurations
+    batch_lP = logP(samples,ansatz, training=True)
     c = tf.cast(flip, dtype=tf.uint8) # c are configurations
-    Pj = tf.exp(logP(c,ansatz, training=True))
+    Pj = tf.exp(logP(c,ansatz))
     co_Pj = tf.reshape(co*Pj,(batch_size, f))
     co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
+    co_Pj_sum = tf.stop_gradient(co_Pj_sum)
+    batch_prob = tf.stop_gradient(tf.exp(batch[:, 2]))
 
-    loss = -tf.reduce_sum( co_Pj_sum * batch_lP / tf.exp(batch_lP)) / tf.cast(batch_size,tf.float32)
+    loss = -tf.reduce_sum( co_Pj_sum * batch_lP / batch_prob) / tf.cast(batch_size,tf.float32)
     #loss2 = -tf.reduce_mean(co * lnP) * tf.cast(f,tf.float32)
     return loss #, loss2
 

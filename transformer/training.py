@@ -42,14 +42,14 @@ j_init = 0
 povm_='Tetra'
 povm = POVM(POVM=povm_, Number_qubits=MAX_LENGTH, initial_state='+',Jz=1.0,hx=1.0,eps=10./float(T))
 
-#mps = MPS(POVM=povm_,Number_qubits=MAX_LENGTH,MPS="Graph")
+mps = MPS(POVM=povm_,Number_qubits=MAX_LENGTH,MPS="Graph")
 bias = povm.getinitialbias("+")
 
 # define target state
-#psi = 1/2.0 * np.array([1.,1.,1.,-1], dtype=complex)
 povm.construct_psi()
 povm.construct_ham()
 psi, E = povm.ham_eigh()
+psi = 1/2.0 * np.array([1.,1.,1.,-1], dtype=complex)
 pho = np.outer(psi, np.conjugate(psi))
 prob = ncon((pho,povm.Mn),([1,2],[-1,2,1])).real
 
@@ -70,10 +70,10 @@ cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
 Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
 print(cFid2, Fid2)
 
-plt.figure(1)
-plt.bar(np.arange(4**MAX_LENGTH),prob)
-plt.figure(2)
-plt.bar(np.arange(4**MAX_LENGTH),prob_povm)
+#plt.figure(1)
+#plt.bar(np.arange(4**MAX_LENGTH),prob)
+#plt.figure(2)
+#plt.bar(np.arange(4**MAX_LENGTH),prob_povm)
 
 
 
@@ -102,9 +102,9 @@ for t in range(T):
   for j in range(j_init,MAX_LENGTH-1):
 
       sites=[j,j+1] # on which sites to apply the gate
-      #gate = povm.p_two_qubit[1] # CZ gate
+      gate = povm.p_two_qubit[1] # CZ gate
       #gate = povm.Up # imaginary time evolution
-      gate = povm.Up2 # imaginary time evolution
+      #gate = povm.Up2 # imaginary time evolution
 
       if Ndataset != 0:
           ## it ensures at least one batch size samples, since Ncall can be zero
@@ -147,18 +147,18 @@ for t in range(T):
                   loss = train_step(flip,co,gtype,batch_size,ansatz)
 
                   #samp,llpp = sample(100000) # get samples from the mode
-                  #samp,llpp = sample(ansatz,1000) # get samples from the mode
+                  samp,llpp = sample(ansatz,1000) # get samples from the mode
 
                   #np.savetxt('./samples/samplex_'+str(epoch)+'_iteration_'+str(idx)+'.txt',samp+1,fmt='%i')
                   #np.savetxt('./samples/logP_'+str(epoch)+'_iteration_'+str(idx)+'.txt',llpp)
-                  #cFid, cFidError, KL, KLError = mps.cFidelity(tf.cast(samp,dtype=tf.int64),llpp)
-                  #Fid, FidErrorr = mps.Fidelity(tf.cast(samp,dtype=tf.int64))
-                  #print('cFid: ', cFid, cFidError,Fid, FidErrorr)
+                  cFid, cFidError, KL, KLError = mps.cFidelity(tf.cast(samp,dtype=tf.int64),llpp)
+                  Fid, FidErrorr = mps.Fidelity(tf.cast(samp,dtype=tf.int64))
+                  print('cFid: ', cFid, cFidError,Fid, FidErrorr)
 
                   prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size, ansatz))
                   pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
-                  Et = np.trace(pho_povm @ povm.ham)
-                  print('exact E:', E, 'current E:', Et.real)
+                  #Et = np.trace(pho_povm @ povm.ham)
+                  #print('exact E:', E, 'current E:', Et.real)
                   cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
                   Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
                   print('cFid2: ', cFid2, Fid2)

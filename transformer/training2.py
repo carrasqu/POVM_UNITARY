@@ -42,7 +42,7 @@ j_init = 0
 povm_='Tetra'
 povm = POVM(POVM=povm_, Number_qubits=MAX_LENGTH, initial_state='+',Jz=1.0,hx=1.0,eps=10./float(T))
 
-#mps = MPS(POVM=povm_,Number_qubits=MAX_LENGTH,MPS="Graph")
+mps = MPS(POVM=povm_,Number_qubits=MAX_LENGTH,MPS="Graph")
 bias = povm.getinitialbias("+")
 
 # define target state
@@ -136,7 +136,7 @@ for t in range(T):
       counter=0
 
       samples = tf.stop_gradient(samples)
-      lP = tf.stop_gradient(lP)
+      #lP = tf.stop_gradient(lP)
 
       #ept = tf.random.shuffle(samples)
       ept = tf.random.shuffle(np.concatenate((samples,lP),axis=1))
@@ -158,27 +158,28 @@ for t in range(T):
 
 
                   #flip,co = flip2_tf(batch,gate,target_vocab_size,sites)
+                  #flip,co = flip2_tf2(batch,gate,target_vocab_size,sites)
 
                   #loss = train_step(flip,co,gtype,batch_size,ansatz)
 
                   flip,co = flip2_reverse_tf(batch[:, :2],gate,target_vocab_size,sites)
-                  loss = train_step2(flip,co,gtype,batch[:,2],ansatz)
+                  loss = train_step2(flip,co,gtype,batch,ansatz)
 
 
                   #samp,llpp = sample(100000) # get samples from the mode
-                  #samp,llpp = sample(ansatz,1000) # get samples from the mode
+                  samp,llpp = sample(ansatz,1000) # get samples from the mode
 
                   #np.savetxt('./samples/samplex_'+str(epoch)+'_iteration_'+str(idx)+'.txt',samp+1,fmt='%i')
                   #np.savetxt('./samples/logP_'+str(epoch)+'_iteration_'+str(idx)+'.txt',llpp)
-                  #cFid, cFidError, KL, KLError = mps.cFidelity(tf.cast(samp,dtype=tf.int64),llpp)
-                  #Fid, FidErrorr = mps.Fidelity(tf.cast(samp,dtype=tf.int64))
-                  #print('cFid: ', cFid, cFidError,Fid, FidErrorr)
+                  cFid, cFidError, KL, KLError = mps.cFidelity(tf.cast(samp,dtype=tf.int64),llpp)
+                  Fid, FidErrorr = mps.Fidelity(tf.cast(samp,dtype=tf.int64))
+                  print('cFid: ', cFid, cFidError,Fid, FidErrorr)
                   #Fidelity.append(np.array([cFid, Fid]))
 
                   prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size, ansatz))
                   pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
-                  Et = np.trace(pho_povm @ povm.ham)
-                  print('exact E:', E, 'current E:', Et.real)
+                  #Et = np.trace(pho_povm @ povm.ham)
+                  #print('exact E:', E, 'current E:', Et.real)
                   cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
                   Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
                   print('cFid2: ', cFid2, Fid2)
