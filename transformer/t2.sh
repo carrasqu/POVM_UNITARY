@@ -8,7 +8,7 @@ N=2     # number of qubit
 T=1     # number of time step
 EPOCH=1    # number of epoch
 BATCH=1000 # batch size
-DATA=2000  # total data each epoch
+DATA=4000  # total data each epoch
 LOAD=0  # default to be 0
 
 
@@ -19,4 +19,6 @@ cp ./*.py results/$name/
 cp ./*.sh results/$name/
 cd results/$name
 
-python -i training.py $N $T $EPOCH $BATCH $DATA $LOAD |& tee output
+#python -i training.py $N $T $EPOCH $BATCH $DATA $LOAD |& tee output
+#python -i training.py $N $T $EPOCH $BATCH $DATA $LOAD
+python -i training2.py $N $T $EPOCH $BATCH $DATA $LOAD

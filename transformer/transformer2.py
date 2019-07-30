@@ -182,10 +182,10 @@ class DecoderLayer(tf.keras.layers.Layer):
     #print(attn1.shape,attn1[:,1,:],"attn1 second word dropout")
     #out1 = self.layernorm1(attn1 + x)
     out1 = attn1 + x
-    s = tf.shape(out1)
-    out1 = tf.reshape(out1,[s[0]*s[1],s[2]])
+    #s = tf.shape(out1)
+    #out1 = tf.reshape(out1,[s[0]*s[1],s[2]])
     out1 = self.layernorm1(out1) ## uncomment
-    out1 = tf.reshape(out1,[s[0],s[1],s[2]])
+    #out1 = tf.reshape(out1,[s[0],s[1],s[2]])
     #print("out1 w1",out1[:,0,:],"out1 w2",out1[:,1,:])
     #attn2, attn_weights_block2 = self.mha2(
     #    enc_output, enc_output, out1, padding_mask)  # (batch_size, target_seq_len, d_model)
@@ -198,10 +198,10 @@ class DecoderLayer(tf.keras.layers.Layer):
     ffn_output = self.dropout3(ffn_output, training=training)
     #out3 = self.layernorm3(ffn_output + out1)  # (batch_size, target_seq_len, d_model)
     out3 = ffn_output + out1
-    s = tf.shape(out3)
-    out3 = tf.reshape(out3,[s[0]*s[1],s[2]])
+    #s = tf.shape(out3)
+    #out3 = tf.reshape(out3,[s[0]*s[1],s[2]])
     out3 = self.layernorm1(out3) ## uncomment
-    out3 = tf.reshape(out3,[s[0],s[1],s[2]])
+    #out3 = tf.reshape(out3,[s[0],s[1],s[2]])
     #out3 = self.layernorm3(ffn_output)
 
     return out3, attn_weights_block1
@@ -445,6 +445,31 @@ def flip2_tf2(S,O,K,site,mask=False):
     return flipped,Coef #,indices
 
 
+def flip2_reverse_tf(S,O,K,site):
+  ## S: batch, O: gate, K: number of measurement outcomes, sites: [j,j+1]
+  ## S is not one-hot form
+    Ns = tf.shape(S)[0] ## batch size
+    N  = tf.shape(S)[1] ## Nqubit
+
+    flipped = tf.reshape(tf.keras.backend.repeat(S, K**2),(Ns*K**2,N)) ## repeat is to prepare K**2 outcome after O adds on, after reshape it has shape (batchsize * 16, Nqubit)
+    s0 = flipped[:,site[0]]
+    s1 = flipped[:,site[1]]
+    a = tf.constant(np.array(list(it.product(range(K), repeat = 2)),dtype=np.float32)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
+    a = tf.tile(a,[Ns,1])
+    indices_ = tf.cast(tf.concat([tf.reshape(s0,[tf.shape(s0)[0],1]),tf.reshape(s1,[tf.shape(s1)[0],1]), a],1),tf.int32)
+
+    a = tf.transpose(a, perm=[1,0])
+    flipped = tf.transpose(flipped,perm=[1,0])
+    ind = tf.constant([[site[0]], [site[1]]])
+    flipped = tf.tensor_scatter_nd_update(flipped, ind, a)
+    flipped = tf.transpose(flipped,perm=[1,0])
+
+    ##getting the coefficients of the p-gates that accompany the flipped samples ## (Nq,Nq,Nq,Nq) shape for index
+    Coef = tf.gather_nd(O,indices_) ## O has to be tensor form
+
+    return flipped,Coef #,indices
+
+
 def loss_function(flip,co,gtype,batch_size,ansatz):
 
     target_vocab_size = ansatz.decoder.target_vocab_size
@@ -455,6 +480,22 @@ def loss_function(flip,co,gtype,batch_size,ansatz):
     #oh =  tf.one_hot(tf.cast(flip,tf.int32),depth=target_vocab_size)
     #co = tf.cast(co,dtype = tf.float32)
     loss = -tf.reduce_sum(co * lnP) / tf.cast(batch_size,tf.float32)
+    #loss2 = -tf.reduce_mean(co * lnP) * tf.cast(f,tf.float32)
+    return loss #, loss2
+
+
+def loss_function2(flip,co,gtype,batch_lP,ansatz):
+
+    target_vocab_size = ansatz.decoder.target_vocab_size
+    batch_size = batch_lP.shape[0]
+
+    f = tf.cond(tf.equal(gtype,1), lambda: target_vocab_size, lambda: target_vocab_size**2)
+    c = tf.cast(flip, dtype=tf.uint8) # c are configurations
+    Pj = tf.exp(logP(c,ansatz, training=True))
+    co_Pj = tf.reshape(co*Pj,(batch_size, f))
+    co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
+
+    loss = -tf.reduce_sum( co_Pj_sum * batch_lP / tf.exp(batch_lP)) / tf.cast(batch_size,tf.float32)
     #loss2 = -tf.reduce_mean(co * lnP) * tf.cast(f,tf.float32)
     return loss #, loss2
 
