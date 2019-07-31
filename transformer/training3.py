@@ -47,16 +47,19 @@ bias = povm.getinitialbias(initial_state)
 
 # define target state
 povm.construct_psi()
-povm.construct_ham()
-psi, E = povm.ham_eigh()
+#povm.construct_ham()
+#psi, E = povm.ham_eigh()
 #psi = 1/2.0 * np.array([1.,1.,1.,-1], dtype=complex)
 ## GHZ state
+psi_t = povm.psi
 psi = np.zeros(2**MAX_LENGTH)
 psi[0] = 1.
 psi[-1] = 1.
-psi = psi/ np.sqrt(2**MAX_LENGTH)
+psi = psi/ np.sqrt(2)
 pho = np.outer(psi, np.conjugate(psi))
+pho_t = np.outer(psi_t, np.conjugate(psi_t))
 prob = ncon((pho,povm.Mn),([1,2],[-1,2,1])).real
+prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
 
 
 # define ansatz
@@ -70,9 +73,12 @@ if LOAD==1:
 print('starting fidelity')
 prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size, ansatz))
 pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
-cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
-Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
-print(cFid2, Fid2)
+cFid = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
+Fid = ncon((pho,pho_povm),([1,2],[2,1]))
+cFid_t = np.dot(np.sqrt(prob_t), np.sqrt(prob_povm))
+Fid_t = ncon((pho_t,pho_povm),([1,2],[2,1]))
+print('target fidelity:', cFid, Fid)
+print('initial fidelity:', cFid_t, Fid_t)
 
 #plt.figure(1)
 #plt.bar(np.arange(4**MAX_LENGTH),prob)
@@ -118,6 +124,11 @@ for t in range(T):
 
   sites=[0]
   gate = povm.p_single_qubit[0] # 1 is CZ gate, 0 is CNOT
+  kron_gate = povm.kron_gate(povm.single_qubit[0], sites[0], MAX_LENGTH)
+  psi_t = psi_t @ kron_gate
+  pho_t = np.outer(psi_t, np.conjugate(psi_t))
+  prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
+
   samples, lP, co_Pj_sum = prepare_samples(Ndataset, batch_size, gate, target_vocab_size, sites, ansatz)
   ept = tf.random.shuffle(np.concatenate((samples,lP, co_Pj_sum),axis=1))
 
@@ -139,8 +150,10 @@ for t in range(T):
               print('loss:', loss)
 
               samp,llpp = ansatz.sample(1000) # get samples from the mode
-              cFid, Fid = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, pho, ansatz)
-              Fidelity.append(np.array([cFid, Fid]))
+              #cFid, Fid = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, pho, ansatz)
+              cFid_t, Fid_t = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob_t, pho_t, ansatz)
+              #Fidelity.append(np.array([cFid, Fid]))
+              Fidelity.append(np.array([cFid_t, Fid_t]))
 
   ansatz.save_weights('./models/transformer2', save_format='tf')
 
@@ -150,6 +163,10 @@ for t in range(T):
 
       sites=[j,j+1] # on which sites to apply the gate
       gate = povm.p_two_qubit[0] # 1 is CZ gate, 0 is CNOT
+      kron_gate = povm.kron_gate(povm.two_qubit[0], sites[0], MAX_LENGTH)
+      psi_t = psi_t @ kron_gate
+      pho_t = np.outer(psi_t, np.conjugate(psi_t))
+      prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
 
       samples, lP, co_Pj_sum = prepare_samples(Ndataset, batch_size, gate, target_vocab_size, sites, ansatz)
       ept = tf.random.shuffle(np.concatenate((samples,lP, co_Pj_sum),axis=1))
@@ -171,8 +188,10 @@ for t in range(T):
                   print('loss:', loss)
 
                   samp,llpp = ansatz.sample(1000) # get samples from the mode
-                  cFid, Fid = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, pho, ansatz)
-                  Fidelity.append(np.array([cFid, Fid]))
+                  #cFid, Fid = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, pho, ansatz)
+                  cFid_t, Fid_t = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob_t, pho_t, ansatz)
+                  #Fidelity.append(np.array([cFid, Fid]))
+                  Fidelity.append(np.array([cFid_t, Fid_t]))
 
       ansatz.save_weights('./models/transformer2', save_format='tf')
 
