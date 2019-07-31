@@ -4,11 +4,11 @@ export OMP_NUM_THREADS=1
 
 NOW=$(date +"%m-%d-%Y")
 num=2
-N=2     # number of qubit
+N=4     # number of qubit
 T=1     # number of time step
-EPOCH=20    # number of epoch
+EPOCH=2    # number of epoch
 BATCH=1000 # batch size
-DATA=4000  # total data each epoch
+DATA=2000  # total data each epoch
 LOAD=0  # default to be 0
 
 
@@ -21,4 +21,5 @@ cd results/$name
 
 #python -i training.py $N $T $EPOCH $BATCH $DATA $LOAD |& tee output
 #python -i training.py $N $T $EPOCH $BATCH $DATA $LOAD
-python -i training2.py $N $T $EPOCH $BATCH $DATA $LOAD
+#python -i training2.py $N $T $EPOCH $BATCH $DATA $LOAD
+python -i training3.py $N $T $EPOCH $BATCH $DATA $LOAD

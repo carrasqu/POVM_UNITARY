@@ -15,7 +15,6 @@ import os
 
 
 def get_angles(pos, i, d_model):
-  #TODO: why i//2
   angle_rates = 1 / np.power(10000, (2 * (i//2)) / np.float32(d_model))
   return pos * angle_rates
 
@@ -47,6 +46,24 @@ def create_look_ahead_mask(size):
   mask = 1 - tf.linalg.band_part(tf.ones((size, size)), -1, 0)
   ## return strictly upper triangular matrix
   return mask  # (seq_len, seq_len)
+
+
+def create_masks(inp, tar):
+  # Encoder padding mask
+  enc_padding_mask = create_padding_mask(inp)
+
+  # Used in the 2nd attention block in the decoder.
+  # This padding mask is used to mask the encoder outputs.
+  dec_padding_mask = create_padding_mask(inp)
+
+  # Used in the 1st attention block in the decoder.
+  # It is used to pad and mask future tokens in the input received by
+  # the decoder.
+  look_ahead_mask = create_look_ahead_mask(tf.shape(tar)[1])
+  dec_target_padding_mask = create_padding_mask(tar)
+  combined_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
+
+  return enc_padding_mask, combined_mask, dec_padding_mask
 
 
 def scaled_dot_product_attention(q, k, v, mask):
@@ -262,8 +279,7 @@ class Transformer(tf.keras.Model):
     bi = tf.constant_initializer(bias)
     self.final_layer = tf.keras.layers.Dense(target_vocab_size,kernel_initializer='zeros',bias_initializer=bi)
 
-  def call(self, tar, training,
-           look_ahead_mask):
+  def process(self, tar, training,look_ahead_mask):
 
     #enc_output = self.encoder(inp, training, enc_padding_mask)  # (batch_size, inp_seq_len, d_model)
 
@@ -275,6 +291,83 @@ class Transformer(tf.keras.Model):
 
     return final_output, attention_weights
 
+
+  def sample(self,Nsamples=1000):
+
+    MAX_LENGTH = self.decoder.max_length
+    d_model = self.decoder.d_model
+    target_vocab_size = self.decoder.target_vocab_size
+
+    encoder_input = tf.ones([Nsamples,MAX_LENGTH,d_model]) #(inp should be? bsize, sequence_length, d_model)
+    output = tf.zeros([Nsamples,1], dtype=tf.uint8)
+    logP = tf.zeros([Nsamples,1])
+
+    for i in range(MAX_LENGTH):
+      #print("conditional sampling at site", i)
+      enc_padding_mask, combined_mask, dec_padding_mask = create_masks(encoder_input, output)
+
+      # predictions.shape == (batch_size, seq_len, vocab_size)
+      #predictions, attention_weights = self.process(output,  self, tar, training,look_ahead_mask)
+      predictions, attention_weights = self.process(output, False, None)
+
+      #if i == MAX_LENGTH-1:
+      #    logP = tf.math.log(tf.nn.softmax(predictions,axis=2)+1e-10) # to compute the logP of the sampled config after sampling
+
+      predictions = predictions[: ,-1:, :]  # (batch_size, 1, vocab_size) # select  # select the last word from the     seq_len dimension
+
+      predictions = tf.reshape(predictions,[-1,target_vocab_size])  # (batch_size, 1, vocab_size)
+
+      predicted_id = tf.random.categorical(predictions,1, dtype=tf.int32) # sample the conditional distribution
+
+      lp = tf.math.log(tf.nn.softmax(predictions,axis=1)+1e-10)
+
+      ohot = tf.reshape(tf.one_hot(predicted_id,target_vocab_size),[-1,target_vocab_size])
+
+      preclp = tf.reshape(tf.reduce_sum(ohot*lp,[1]),[-1,1])
+
+      logP = logP + preclp
+
+      output = tf.concat([output, tf.cast(predicted_id,dtype=tf.uint8)], axis=1)
+
+    output = tf.slice(output, [0, 1], [-1, -1]) # Cut the input of the initial call (zeros)
+
+    #oh = tf.one_hot(tf.cast(output,dtype=tf.int32),target_vocab_size) # one hot vector of the sample
+    #logP = tf.reduce_sum(logP*oh,[1,2]) # the log probability of the configuration
+    #print(logP)
+
+    return output,logP #, attention_weights
+
+
+  def call(self,config,training=False):
+
+    MAX_LENGTH = self.decoder.max_length
+    d_model = self.decoder.d_model
+    target_vocab_size = self.decoder.target_vocab_size
+
+    Nsamples =  tf.shape(config)[0]
+    encoder_input = tf.ones([Nsamples,MAX_LENGTH,d_model]) #(inp should be? bsize, sequence_length, d_model)
+    init  = tf.zeros([Nsamples,1])
+    output = tf.concat([init,tf.cast(config,dtype=tf.float32)],axis=1)
+    output = output[:,0:MAX_LENGTH]
+
+    enc_padding_mask, combined_mask, dec_padding_mask = create_masks(encoder_input, output)
+
+    # predictions.shape == (batch_size, seq_len, vocab_size) # self, tar, training,look_ahead_mask
+    predictions, attention_weights = self.process(output,training,combined_mask)
+
+    # predictions (Nsamples/b_size, MAX_LENGTH,vocab_size)
+    # print(predictions)
+    logP = tf.math.log(tf.nn.softmax(predictions,axis=2)+1e-10)
+    #print(logP[:,0,:],logP.shape,"config+0",output)
+    oh = tf.one_hot(config,target_vocab_size)
+    logP = tf.reduce_sum(logP*oh,[1,2])
+
+    return logP #, attention_weights
+
+
+
+
+### Utilz (this part could be separted later)
 
 #this is from the original Transformer paper
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -292,100 +385,6 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
 
     return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
 
-
-def create_masks(inp, tar):
-  # Encoder padding mask
-  enc_padding_mask = create_padding_mask(inp)
-
-  # Used in the 2nd attention block in the decoder.
-  # This padding mask is used to mask the encoder outputs.
-  dec_padding_mask = create_padding_mask(inp)
-
-  # Used in the 1st attention block in the decoder.
-  # It is used to pad and mask future tokens in the input received by
-  # the decoder.
-  look_ahead_mask = create_look_ahead_mask(tf.shape(tar)[1])
-  dec_target_padding_mask = create_padding_mask(tar)
-  combined_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
-
-  return enc_padding_mask, combined_mask, dec_padding_mask
-
-
-
-### Utilz (this part could be separted later)
-
-def sample(ansatz,Nsamples=1000):
-
-  MAX_LENGTH = ansatz.decoder.max_length
-  d_model = ansatz.decoder.d_model
-  target_vocab_size = ansatz.decoder.target_vocab_size
-
-  encoder_input = tf.ones([Nsamples,MAX_LENGTH,d_model]) #(inp should be? bsize, sequence_length, d_model)
-  output = tf.zeros([Nsamples,1], dtype=tf.uint8)
-  logP = tf.zeros([Nsamples,1])
-
-  for i in range(MAX_LENGTH):
-    #print("conditional sampling at site", i)
-    enc_padding_mask, combined_mask, dec_padding_mask = create_masks(
-        encoder_input, output)
-
-    # predictions.shape == (batch_size, seq_len, vocab_size)
-    predictions, attention_weights = ansatz(output, # self, tar, training,look_ahead_mask
-                                                 False,
-                                                 None)
-    #if i == MAX_LENGTH-1:
-    #    logP = tf.math.log(tf.nn.softmax(predictions,axis=2)+1e-10) # to compute the logP of the sampled config after sampling
-
-    predictions = predictions[: ,-1:, :]  # (batch_size, 1, vocab_size) # select  # select the last word from the     seq_len dimension
-
-    predictions = tf.reshape(predictions,[-1,target_vocab_size])  # (batch_size, 1, vocab_size)
-
-    predicted_id = tf.random.categorical(predictions,1, dtype=tf.int32) # sample the conditional distribution
-
-    lp = tf.math.log(tf.nn.softmax(predictions,axis=1)+1e-10)
-
-    ohot = tf.reshape(tf.one_hot(predicted_id,target_vocab_size),[-1,target_vocab_size])
-
-    preclp = tf.reshape(tf.reduce_sum(ohot*lp,[1]),[-1,1])
-
-    logP = logP + preclp
-
-    output = tf.concat([output, tf.cast(predicted_id,dtype=tf.uint8)], axis=1)
-
-  output = tf.slice(output, [0, 1], [-1, -1]) # Cut the input of the initial call (zeros)
-
-  #oh = tf.one_hot(tf.cast(output,dtype=tf.int32),target_vocab_size) # one hot vector of the sample
-  #logP = tf.reduce_sum(logP*oh,[1,2]) # the log probability of the configuration
-  #print(logP)
-
-  return output,logP #, attention_weights
-
-def logP(config,ansatz, training=False):
-
-  MAX_LENGTH = ansatz.decoder.max_length
-  d_model = ansatz.decoder.d_model
-  target_vocab_size = ansatz.decoder.target_vocab_size
-
-  Nsamples =  tf.shape(config)[0]
-  encoder_input = tf.ones([Nsamples,MAX_LENGTH,d_model]) #(inp should be? bsize, sequence_length, d_model)
-  init  = tf.zeros([Nsamples,1])
-  output = tf.concat([init,tf.cast(config,dtype=tf.float32)],axis=1)
-  output = output[:,0:MAX_LENGTH]
-
-  enc_padding_mask, combined_mask, dec_padding_mask = create_masks(
-        encoder_input, output)
-
-  # predictions.shape == (batch_size, seq_len, vocab_size) # self, tar, training,look_ahead_mask
-  predictions, attention_weights = ansatz(output,training,combined_mask)
-
-  # predictions (Nsamples/b_size, MAX_LENGTH,vocab_size)
-  # print(predictions)
-  logP = tf.math.log(tf.nn.softmax(predictions,axis=2)+1e-10)
-  #print(logP[:,0,:],logP.shape,"config+0",output)
-  oh = tf.one_hot(config,target_vocab_size)
-  logP = tf.reduce_sum(logP*oh,[1,2])
-
-  return logP #, attention_weights
 
 
 def flip2_tf(S,O,K,site,mask=False):
@@ -470,13 +469,37 @@ def flip2_reverse_tf(S,O,K,site):
     return flipped,Coef #,indices
 
 
+def flip1_reverse_tf(S,O,K,site):
+  ## S: batch, O: gate, K: number of measurement outcomes, sites: [j,j+1]
+  ## S is not one-hot form
+    Ns = tf.shape(S)[0] ## batch size
+    N  = tf.shape(S)[1] ## Nqubit
+
+    flipped = tf.reshape(tf.keras.backend.repeat(S, K),(Ns*K,N)) ## repeat is to prepare K**2 outcome after O adds on, after reshape it has shape (batchsize * 16, Nqubit)
+    s0 = flipped[:,site[0]]
+    a = tf.constant(np.array(list(it.product(range(K), repeat = 1)),dtype=np.uint8)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
+    a = tf.tile(a,[Ns,1])
+    indices_ = tf.cast(tf.concat([tf.reshape(s0,[tf.shape(s0)[0],1]), a],1),tf.int32)
+
+    a = tf.transpose(a, perm=[1,0])
+    flipped = tf.transpose(flipped,perm=[1,0])
+    ind = tf.constant([[site[0]]])
+    flipped = tf.tensor_scatter_nd_update(flipped, ind, a)
+    flipped = tf.transpose(flipped,perm=[1,0])
+
+    ##getting the coefficients of the p-gates that accompany the flipped samples ## (Nq,Nq,Nq,Nq) shape for index
+    Coef = tf.gather_nd(O,indices_) ## O has to be tensor form
+
+    return flipped,Coef #,indices
+
+
 def loss_function(flip,co,gtype,batch_size,ansatz):
 
     target_vocab_size = ansatz.decoder.target_vocab_size
 
     f = tf.cond(tf.equal(gtype,1), lambda: target_vocab_size, lambda: target_vocab_size**2)
     c = tf.cast(flip, dtype=tf.uint8) # c are configurations
-    lnP = logP(c,ansatz, training=True)
+    lnP = ansatz(c,training=True)
     #oh =  tf.one_hot(tf.cast(flip,tf.int32),depth=target_vocab_size)
     #co = tf.cast(co,dtype = tf.float32)
     loss = -tf.reduce_sum(co * lnP) / tf.cast(batch_size,tf.float32)
@@ -490,7 +513,7 @@ def loss_function2(batch,ansatz):
     batch_size = batch.shape[0]
 
     samples = tf.cast(batch[:,:-2], dtype=tf.uint8) # c are configurations
-    batch_lP = logP(samples,ansatz, training=True)
+    batch_lP = ansatz(samples,training=True)
     co_Pj_sum = batch[:, 3]
     batch_prob = tf.stop_gradient(tf.exp(batch[:, 2]))
 
@@ -507,7 +530,72 @@ def vectorize(num_sites, K, ansatz):
       #l_basis.append(basis_str)
     l_basis = np.array(l_basis)
     l_basis = tf.cast(l_basis, dtype=tf.uint8)
-    lnP = logP(l_basis, ansatz, training=False)
+    lnP = ansatz(l_basis, training=False)
     return lnP
 
+
+
+
+def prepare_samples(Ndataset, batch_size, gate, target_vocab_size, sites, ansatz):
+
+    gate_factor = int(gate.ndim**2)
+    if Ndataset != 0:
+        ## it ensures at least one batch size samples, since Ncall can be zero
+        Ncalls = Ndataset /batch_size
+        samples,lP = ansatz.sample(batch_size) # get samples from the model
+        lP = np.reshape(lP,[-1,1]) ## necessary for concatenate
+        if gate_factor == 16:
+            flip,co = flip2_reverse_tf(samples,gate,target_vocab_size,sites)
+        else:
+            flip,co = flip1_reverse_tf(samples,gate,target_vocab_size,sites)
+
+        flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
+        Pj = tf.exp(ansatz(flip))
+        co_Pj = tf.reshape(co*Pj,(batch_size, gate_factor))
+        co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
+        co_Pj_sum = np.reshape(co_Pj_sum,[-1,1])
+
+        for k in range(int(Ncalls)):
+            sa,llpp = ansatz.sample(batch_size)
+            samples = np.vstack((samples,sa))
+            llpp =np.reshape(llpp,[-1,1])
+            lP =  np.vstack((lP,llpp))
+            if gate_factor == 16:
+                fp,coef = flip2_reverse_tf(sa,gate,target_vocab_size,sites)
+            else:
+                fp,coef = flip1_reverse_tf(sa,gate,target_vocab_size,sites)
+            fp = tf.cast(fp, dtype=tf.uint8) # c are configurations
+            pj = tf.exp(ansatz(fp))
+            coef_pj = tf.reshape(coef*pj,(batch_size, gate_factor))
+            coef_pj_sum = tf.reduce_sum(coef_pj, axis=1)
+            coef_pj_sum = np.reshape(coef_pj_sum,[-1,1])
+            co_Pj_sum =  np.vstack((co_Pj_sum,coef_pj_sum))
+
+    bcount = 0
+    counter=0
+    samples = tf.stop_gradient(samples)
+    co_Pj_sum = tf.stop_gradient(co_Pj_sum)
+    lP = tf.stop_gradient(lP)
+
+    return samples, lP, co_Pj_sum
+
+
+def Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, pho, ansatz):
+
+    cFid, cFidError, KL, KLError = mps.cFidelity(tf.cast(samp,dtype=tf.int64),llpp)
+    Fid, FidErrorr = mps.Fidelity(tf.cast(samp,dtype=tf.int64))
+    print('cFid: ', cFid, cFidError,Fid, FidErrorr)
+
+    prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size, ansatz))
+    pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
+    #Et = np.trace(pho_povm @ povm.ham)
+    #print('exact E:', E, 'current E:', Et.real)
+    cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
+    Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
+    print('cFid2: ', cFid2, Fid2)
+
+    a = np.array(list(it.product(range(4),repeat = MAX_LENGTH)), dtype=np.uint8)
+    l = np.sum(np.exp(ansatz(a)))
+    print("prob", l)
+    return cFid2, Fid2
 
