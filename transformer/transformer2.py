@@ -454,7 +454,7 @@ def flip2_reverse_tf(S,O,K,site):
     flipped = tf.reshape(tf.keras.backend.repeat(S, K**2),(Ns*K**2,N)) ## repeat is to prepare K**2 outcome after O adds on, after reshape it has shape (batchsize * 16, Nqubit)
     s0 = flipped[:,site[0]]
     s1 = flipped[:,site[1]]
-    a = tf.constant(np.array(list(it.product(range(K), repeat = 2)),dtype=np.float32)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
+    a = tf.constant(np.array(list(it.product(range(K), repeat = 2)),dtype=np.uint8)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
     a = tf.tile(a,[Ns,1])
     indices_ = tf.cast(tf.concat([tf.reshape(s0,[tf.shape(s0)[0],1]),tf.reshape(s1,[tf.shape(s1)[0],1]), a],1),tf.int32)
 
@@ -484,19 +484,14 @@ def loss_function(flip,co,gtype,batch_size,ansatz):
     return loss #, loss2
 
 
-def loss_function2(flip,co,gtype,batch,ansatz):
+def loss_function2(batch,ansatz):
 
     target_vocab_size = ansatz.decoder.target_vocab_size
     batch_size = batch.shape[0]
 
-    f = tf.cond(tf.equal(gtype,1), lambda: target_vocab_size, lambda: target_vocab_size**2)
     samples = tf.cast(batch[:,:2], dtype=tf.uint8) # c are configurations
     batch_lP = logP(samples,ansatz, training=True)
-    c = tf.cast(flip, dtype=tf.uint8) # c are configurations
-    Pj = tf.exp(logP(c,ansatz))
-    co_Pj = tf.reshape(co*Pj,(batch_size, f))
-    co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
-    co_Pj_sum = tf.stop_gradient(co_Pj_sum)
+    co_Pj_sum = batch[:, 3]
     batch_prob = tf.stop_gradient(tf.exp(batch[:, 2]))
 
     loss = -tf.reduce_sum( co_Pj_sum * batch_lP / batch_prob) / tf.cast(batch_size,tf.float32)

@@ -69,10 +69,10 @@ cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
 Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
 print(cFid2, Fid2)
 
-plt.figure(1)
-plt.bar(np.arange(4**MAX_LENGTH),prob)
-plt.figure(2)
-plt.bar(np.arange(4**MAX_LENGTH),prob_povm)
+#plt.figure(1)
+#plt.bar(np.arange(4**MAX_LENGTH),prob)
+#plt.figure(2)
+#plt.bar(np.arange(4**MAX_LENGTH),prob_povm)
 
 
 
@@ -97,10 +97,10 @@ def train_step(flip,co,gtype,batch_size,ansatz):
 
 
 @tf.function
-def train_step2(flip,co,gtype,batch_lP,ansatz):
+def train_step2(batch,ansatz):
 
     with tf.GradientTape() as tape:
-        loss = loss_function2(flip,co,gtype,batch_lP,ansatz)
+        loss = loss_function2(batch,ansatz)
 
     gradients = tape.gradient(loss, ansatz.trainable_variables)
     #print(gradients)
@@ -117,29 +117,46 @@ for t in range(T):
       gate = povm.p_two_qubit[1] # CZ gate
       #gate = povm.Up # imaginary time evolution
       #gate = povm.Up2 # imaginary time evolution
+      gtype = 2 # 2-qubit gate2
+      gate_factor = tf.cond(tf.equal(gtype,1), lambda: target_vocab_size, lambda: target_vocab_size**2)
 
       if Ndataset != 0:
           ## it ensures at least one batch size samples, since Ncall can be zero
           Ncalls = Ndataset /batch_size
           samples,lP = sample(ansatz, batch_size) # get samples from the model
           lP = np.reshape(lP,[-1,1]) ## not necessary
+          flip,co = flip2_reverse_tf(samples,gate,target_vocab_size,sites)
+          flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
+          Pj = tf.exp(logP(flip,ansatz))
+          co_Pj = tf.reshape(co*Pj,(batch_size, gate_factor))
+          co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
+          co_Pj_sum = np.reshape(co_Pj_sum,[-1,1])
 
           for k in range(int(Ncalls)):
               sa,llpp = sample(ansatz, batch_size)
               samples = np.vstack((samples,sa))
               llpp =np.reshape(llpp,[-1,1])
               lP =  np.vstack((lP,llpp))
+              fp,coef = flip2_reverse_tf(sa,gate,target_vocab_size,sites)
+              fp = tf.cast(fp, dtype=tf.uint8) # c are configurations
+              pj = tf.exp(logP(fp,ansatz))
+              coef_pj = tf.reshape(coef*pj,(batch_size, gate_factor))
+              coef_pj_sum = tf.reduce_sum(coef_pj, axis=1)
+              coef_pj_sum = np.reshape(coef_pj_sum,[-1,1])
+              co_Pj_sum =  np.vstack((co_Pj_sum,coef_pj_sum))
 
-      gtype = 2 # 2-qubit gate
+
+
       nsteps = int(samples.shape[0] / batch_size) ## samples.shape[0]=Ndataset + batchsize
       bcount = 0
       counter=0
 
       samples = tf.stop_gradient(samples)
-      #lP = tf.stop_gradient(lP)
+      co_Pj_sum = tf.stop_gradient(co_Pj_sum)
+      lP = tf.stop_gradient(lP)
 
       #ept = tf.random.shuffle(samples)
-      ept = tf.random.shuffle(np.concatenate((samples,lP),axis=1))
+      ept = tf.random.shuffle(np.concatenate((samples,lP, co_Pj_sum),axis=1))
 
 
       for epoch in range(EPOCHS):
@@ -150,7 +167,7 @@ for t in range(T):
                   if bcount*batch_size + batch_size>=Ndataset:
                       bcount=0
                       #ept = tf.random.shuffle(samples)
-                      ept = tf.random.shuffle(np.concatenate((samples,lP),axis=1)) ## first two columns are configurations and the last column is the corresponding probability
+                      ept = tf.random.shuffle(np.concatenate((samples,lP, co_Pj_sum),axis=1)) ## first two columns are configurations and the last column is the corresponding probability
 
 
                   batch = ept[ bcount*batch_size: bcount*batch_size+batch_size,:]
@@ -162,8 +179,7 @@ for t in range(T):
 
                   #loss = train_step(flip,co,gtype,batch_size,ansatz)
 
-                  flip,co = flip2_reverse_tf(batch[:, :2],gate,target_vocab_size,sites)
-                  loss = train_step2(flip,co,gtype,batch,ansatz)
+                  loss = train_step2(batch,ansatz)
 
 
                   #samp,llpp = sample(100000) # get samples from the mode
