@@ -393,7 +393,7 @@ def flip2_tf(S,O,K,site,mask=False):
     Ns = tf.shape(S)[0] ## batch size
     N  = tf.shape(S)[1] ## Nqubit
     flipped = tf.reshape(tf.keras.backend.repeat(S, K**2),(Ns*K**2,N)) ## repeat is to prepare K**2 outcome after O adds on, after reshape it has shape (batchsize * 16, Nqubit)
-    a = tf.constant(np.array(list(it.product(range(K), repeat = 2)),dtype=np.uint8)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
+    a = tf.constant(np.array(list(it.product(range(K), repeat = 2)),dtype=np.float32)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
     s0 = flipped[:,site[0]]
     s1 = flipped[:,site[1]]
     a0 = tf.reshape(tf.tile(a[:,0],[Ns]),[-1]) ## tf.tile repeasts tensor Ns times
@@ -403,6 +403,31 @@ def flip2_tf(S,O,K,site,mask=False):
     flipped = slicetf.replace_slice_in(flipped)[:,site[1]].with_value(tf.reshape( a1 ,[K**2*Ns,1]))
     a = tf.tile(a,[Ns,1])
     indices_ = tf.cast(tf.concat([a,tf.reshape(s0,[tf.shape(s0)[0],1]),tf.reshape(s1,[tf.shape(s1)[0],1])],1),tf.int32)
+    ##getting the coefficients of the p-gates that accompany the flipped samples ## (Nq,Nq,Nq,Nq) shape for index
+    Coef = tf.gather_nd(O,indices_) ## O has to be tensor form
+    ## transform samples to one hot vector
+    #flipped = tf.one_hot(tf.cast(flipped,tf.int32),depth=K)
+    #flipped = tf.reshape(flipped,[tf.shape(flipped)[0],tf.shape(flipped)[1]*tf.shape(flipped)[2]])
+    if mask:
+      ind = Coef > 1e-13
+      Coef = tf.gather(Coef, tf.where(ind))
+      flipped = tf.gather_nd(flipped, tf.where(ind))
+    return flipped,Coef #,indices
+
+
+def flip1_tf(S,O,K,site,mask=False):
+  ## S: batch, O: gate, K: number of measurement outcomes, sites: [j,j+1]
+  ## S is not one-hot form
+    Ns = tf.shape(S)[0] ## batch size
+    N  = tf.shape(S)[1] ## Nqubit
+    flipped = tf.reshape(tf.keras.backend.repeat(S, K),(Ns*K,N)) ## repeat is to prepare K**2 outcome after O adds on, after reshape it has shape (batchsize * 16, Nqubit)
+    a = tf.constant(np.array(list(it.product(range(K), repeat = 1)),dtype=np.float32)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
+    s0 = flipped[:,site[0]]
+    a0 = tf.reshape(tf.tile(a[:,0],[Ns]),[-1]) ## tf.tile repeasts tensor Ns times
+    ## flipped has shape (batch, Nqubit), this function is to replace flipped[batch, site0], flipped[batch, site1] with a0, a1 values
+    flipped = slicetf.replace_slice_in(flipped)[:,site[0]].with_value(tf.reshape( a0 ,[K*Ns,1]))
+    a = tf.tile(a,[Ns,1])
+    indices_ = tf.cast(tf.concat([a,tf.reshape(s0,[tf.shape(s0)[0],1])],1),tf.int32)
     ##getting the coefficients of the p-gates that accompany the flipped samples ## (Nq,Nq,Nq,Nq) shape for index
     Coef = tf.gather_nd(O,indices_) ## O has to be tensor form
     ## transform samples to one hot vector
@@ -509,13 +534,14 @@ def loss_function(flip,co,gtype,batch_size,ansatz):
 
 def loss_function2(batch,ansatz):
 
+    ## batch = (samples, lP, co_Pj_sum)
     target_vocab_size = ansatz.decoder.target_vocab_size
     batch_size = batch.shape[0]
 
     samples = tf.cast(batch[:,:-2], dtype=tf.uint8) # c are configurations
     batch_lP = ansatz(samples,training=True)
-    co_Pj_sum = batch[:, 3]
-    batch_prob = tf.stop_gradient(tf.exp(batch[:, 2]))
+    co_Pj_sum = batch[:, -1]
+    batch_prob = tf.stop_gradient(tf.exp(batch[:, -2]))
 
     loss = -tf.reduce_sum( co_Pj_sum * batch_lP / batch_prob) / tf.cast(batch_size,tf.float32)
     #loss2 = -tf.reduce_mean(co * lnP) * tf.cast(f,tf.float32)
@@ -536,7 +562,7 @@ def vectorize(num_sites, K, ansatz):
 
 
 
-def prepare_samples(Ndataset, batch_size, gate, target_vocab_size, sites, ansatz):
+def reverse_samples(Ndataset, batch_size, gate, target_vocab_size, sites, ansatz):
 
     gate_factor = int(gate.ndim**2)
     if Ndataset != 0:
@@ -571,13 +597,31 @@ def prepare_samples(Ndataset, batch_size, gate, target_vocab_size, sites, ansatz
             coef_pj_sum = np.reshape(coef_pj_sum,[-1,1])
             co_Pj_sum =  np.vstack((co_Pj_sum,coef_pj_sum))
 
-    bcount = 0
-    counter=0
     samples = tf.stop_gradient(samples)
     co_Pj_sum = tf.stop_gradient(co_Pj_sum)
     lP = tf.stop_gradient(lP)
 
-    return samples, lP, co_Pj_sum
+    return (samples, lP, co_Pj_sum)
+
+
+def forward_samples(Ndataset, batch_size, ansatz):
+    if Ndataset != 0:
+        ## it ensures at least one batch size samples, since Ncall can be zero
+        Ncalls = Ndataset /batch_size
+        samples,lP = ansatz.sample(batch_size) # get samples from the model
+        lP = np.reshape(lP,[-1,1]) ## not necessary
+
+        for k in range(int(Ncalls)):
+            sa,llpp = ansatz.sample(batch_size)
+            samples = np.vstack((samples,sa))
+            llpp =np.reshape(llpp,[-1,1])
+            lP =  np.vstack((lP,llpp))
+
+    samples = tf.stop_gradient(samples)
+    lP = tf.stop_gradient(lP)
+
+    return (samples, lP)
+
 
 
 def Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, pho, ansatz):

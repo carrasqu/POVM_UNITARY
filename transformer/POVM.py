@@ -239,10 +239,21 @@ class POVM():
       return g2.real.astype('float32')
 
 
+    def P_gate(self, gate, mask=True):
+      gate_factor = int(gate.ndim/2)
+      if gate_factor == 1:
+        g = ncon((self.M, gate, self.Nt,np.transpose(np.conj(gate))),([-1,4,1],[1,2],[-2,2,5],[5,4]))
+      else:
+        g = ncon((self.M,self.M, gate,self.Nt,self.Nt,np.conj(gate)),([-1,9,1],[-2,10,2],[1,2,3,4],[-3,3,7],[-4,4,8],[9,10,7,8]))
+      if mask:
+        g_mask = np.abs(g.real) > 1e-15
+        g = np.multiply(g, g_mask)
+      return g.real.astype('float32')
+
+
     def kron_gate(self, gate, site, Nqubit):
 
       gate_factor = int(gate.ndim /2)
-      print('gate_factor', gate_factor)
       g = gate.copy()
       if gate_factor == 2:
         g = np.reshape(g, (4,4))

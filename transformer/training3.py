@@ -122,78 +122,62 @@ def train_step2(batch,ansatz):
 Fidelity=[]
 for t in range(T):
 
-  sites=[0]
-  gate = povm.p_single_qubit[0] # 1 is CZ gate, 0 is CNOT
-  kron_gate = povm.kron_gate(povm.single_qubit[0], sites[0], MAX_LENGTH)
-  psi_t = psi_t @ kron_gate
-  pho_t = np.outer(psi_t, np.conjugate(psi_t))
-  prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
+  SITE = [[0]]
+  GATE = [povm.H]
+  P_GATE = [povm.P_gate(povm.H)]
+  for i in range(MAX_LENGTH-1):
+      SITE.append([i,i+1])
+      GATE.append(povm.cnot)
+      P_GATE.append(povm.P_gate(povm.cnot))
 
-  samples, lP, co_Pj_sum = prepare_samples(Ndataset, batch_size, gate, target_vocab_size, sites, ansatz)
-  ept = tf.random.shuffle(np.concatenate((samples,lP, co_Pj_sum),axis=1))
+  for i in range(len(SITE)):
 
-  nsteps = int(samples.shape[0] / batch_size) ## samples.shape[0]=Ndataset + batchsize
-  bcount = 0
-  counter=0
+    sites=SITE[i]
+    gate = P_GATE[i]
+    gtype = int(gate.ndim/2)
+    kron_gate = povm.kron_gate(GATE[i], sites[0], MAX_LENGTH)
+    psi_t = psi_t @ kron_gate
+    pho_t = np.outer(psi_t, np.conjugate(psi_t))
+    prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
 
-  for epoch in range(EPOCHS):
+    samples_lP_co = reverse_samples(Ndataset, batch_size, gate, target_vocab_size, sites, ansatz)
+    #samples_lP_co = forward_samples(Ndataset, batch_size, ansatz)
+    ept = tf.random.shuffle(np.concatenate(samples_lP_co,axis=1))
 
-          for idx in range(nsteps):
-              print("epoch", epoch,"out of ", EPOCHS,"site", sites[0], 'nsteps', idx)
-              if bcount*batch_size + batch_size>=Ndataset:
-                  bcount=0
-                  ept = tf.random.shuffle(np.concatenate((samples,lP, co_Pj_sum),axis=1)) ## first two columns are configurations and the last column is the corresponding probability
-              batch = ept[ bcount*batch_size: bcount*batch_size+batch_size,:]
-              bcount=bcount+1
+    nsteps = int(samples_lP_co[0].shape[0] / batch_size) ## samples.shape[0]=Ndataset + batchsize
+    bcount = 0
+    counter=0
 
-              loss = train_step2(batch,ansatz)
-              print('loss:', loss)
+    for epoch in range(EPOCHS):
 
-              samp,llpp = ansatz.sample(1000) # get samples from the mode
-              #cFid, Fid = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, pho, ansatz)
-              cFid_t, Fid_t = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob_t, pho_t, ansatz)
-              #Fidelity.append(np.array([cFid, Fid]))
-              Fidelity.append(np.array([cFid_t, Fid_t]))
+            for idx in range(nsteps):
+                print("gate", i, "site", sites[0], "epoch", epoch,"out of ", EPOCHS, 'nsteps', idx)
+                if bcount*batch_size + batch_size>=Ndataset:
+                    bcount=0
+                    #ept = tf.random.shuffle(np.concatenate((samples,lP, co_Pj_sum),axis=1))
+                    ept = tf.random.shuffle(np.concatenate((samples_lP_co),axis=1))
+                batch = ept[ bcount*batch_size: bcount*batch_size+batch_size,:]
+                bcount=bcount+1
 
-  ansatz.save_weights('./models/transformer2', save_format='tf')
+                ## forward sampling training
+                #if gtype == 1:
+                #    ## batch[:,:-1] = samples in batch
+                #    flip,co = flip1_tf(batch[:,:-1],gate,target_vocab_size,sites)
+                #else:
+                #    flip,co = flip2_tf(batch[:,:-1],gate,target_vocab_size,sites)
+                #loss = train_step(flip,co,gtype,batch_size,ansatz)
+                ## reverse sampling training
+                loss = train_step2(batch,ansatz)
+                print('loss:', loss)
 
+                samp,llpp = ansatz.sample(1000) # get samples from the mode
+                #cFid, Fid = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, pho, ansatz)
+                cFid_t, Fid_t = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob_t, pho_t, ansatz)
+                #Fidelity.append(np.array([cFid, Fid]))
+                Fidelity.append(np.array([cFid_t, Fid_t]))
 
-  ## site [j,j+1] > epoch > nsteps = Ndataset/batchsize
-  for j in range(j_init,MAX_LENGTH-1):
+    ansatz.save_weights('./models/transformer2', save_format='tf')
 
-      sites=[j,j+1] # on which sites to apply the gate
-      gate = povm.p_two_qubit[0] # 1 is CZ gate, 0 is CNOT
-      kron_gate = povm.kron_gate(povm.two_qubit[0], sites[0], MAX_LENGTH)
-      psi_t = psi_t @ kron_gate
-      pho_t = np.outer(psi_t, np.conjugate(psi_t))
-      prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
-
-      samples, lP, co_Pj_sum = prepare_samples(Ndataset, batch_size, gate, target_vocab_size, sites, ansatz)
-      ept = tf.random.shuffle(np.concatenate((samples,lP, co_Pj_sum),axis=1))
-
-      nsteps = int(samples.shape[0] / batch_size) ## samples.shape[0]=Ndataset + batchsize
-      bcount = 0
-      counter=0
-
-      for epoch in range(EPOCHS):
-              for idx in range(nsteps):
-                  print("epoch", epoch,"out of ", EPOCHS,"two site", j, 'nsteps', idx)
-                  if bcount*batch_size + batch_size>=Ndataset:
-                      bcount=0
-                      ept = tf.random.shuffle(np.concatenate((samples,lP, co_Pj_sum),axis=1)) ## first two columns are configurations and the last column is the corresponding probability
-                  batch = ept[ bcount*batch_size: bcount*batch_size+batch_size,:]
-                  bcount=bcount+1
-
-                  loss = train_step2(batch,ansatz)
-                  print('loss:', loss)
-
-                  samp,llpp = ansatz.sample(1000) # get samples from the mode
-                  #cFid, Fid = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, pho, ansatz)
-                  cFid_t, Fid_t = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob_t, pho_t, ansatz)
-                  #Fidelity.append(np.array([cFid, Fid]))
-                  Fidelity.append(np.array([cFid_t, Fid_t]))
-
-      ansatz.save_weights('./models/transformer2', save_format='tf')
 
 
 Fidelity = np.array(Fidelity)
