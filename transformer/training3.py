@@ -3,6 +3,7 @@ from ncon import ncon
 
 import tensorflow as tf
 import numpy as np
+import scipy as sp
 import matplotlib.pyplot as plt
 from POVM import POVM
 import itertools as it
@@ -179,36 +180,9 @@ for t in range(T):
     ansatz.save_weights('./models/transformer2', save_format='tf')
 
 
-
 Fidelity = np.array(Fidelity)
 np.savetxt('./data/Fidelity.txt',Fidelity)
 
 
-
-#samples,lnP = sample(Ndataset)
-if Ndataset != 0:
-    Ncalls = Ndataset /batch_size
-    samples,lP = ansatz.sample(batch_size) # get samples from the model
-    lP = np.reshape(lP,[-1,1])
-
-    for k in range(int(Ncalls)):
-        sa,llpp = ansatz.sample(batch_size)
-        samples = np.vstack((samples,sa))
-        llpp =np.reshape(llpp,[-1,1])
-        lP =  np.vstack((lP,llpp))
-
-
-# classical fidelity from mps
-#cFid, cFidError, KL, KLError = mps.cFidelity(tf.cast(samples,dtype=tf.int64),lP)
-#Fid, FidErrorr = mps.Fidelity(tf.cast(samples,dtype=tf.int64))
-#stabilizers,sError = mps.stabilizers_samples(tf.cast(samples,dtype=tf.int64))
-#print(cFid, cFidError,Fid, FidErrorr)
-#print(stabilizers,sError,np.mean(stabilizers),np.mean(sError))
-
-
-prob = ncon((pho,povm.Mn),([1,2],[-1,2,1]))
-prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size, ansatz))
-pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
-cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
-Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
-print(cFid2, Fid2)
+## final fidelity
+cFid, Fid = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, pho, ansatz)

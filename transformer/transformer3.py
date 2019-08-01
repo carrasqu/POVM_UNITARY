@@ -4,6 +4,7 @@ from ncon import ncon
 import tensorflow as tf
 import time
 import numpy as np
+import scipy as sp
 import matplotlib.pyplot as plt
 from POVM import POVM
 import itertools as it
@@ -635,7 +636,8 @@ def Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, ph
     #Et = np.trace(pho_povm @ povm.ham)
     #print('exact E:', E, 'current E:', Et.real)
     cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
-    Fid2 = ncon((pho,pho_povm),([1,2],[2,1]))
+    #Fid2 = ncon((pho,pho_povm),([1,2],[2,1])) ## true for 2 qubit
+    Fid2 = np.square(np.trace(sp.linalg.sqrtm(pho @ pho_povm @pho))) ## true for pure state pho
     print('cFid2: ', cFid2, Fid2)
 
     a = np.array(list(it.product(range(4),repeat = MAX_LENGTH)), dtype=np.uint8)
