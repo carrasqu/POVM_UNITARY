@@ -645,3 +645,11 @@ def Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, ph
     print("prob", l)
     return cFid2, Fid2
 
+
+def Fidelity_test_mps(samp, llpp, MAX_LENGTH, target_vocab_size, mps, ansatz):
+
+    cFid, cFidError, KL, KLError = mps.cFidelity(tf.cast(samp,dtype=tf.int64),llpp)
+    Fid, FidErrorr = mps.Fidelity(tf.cast(samp,dtype=tf.int64))
+    print('cFid: ', cFid, cFidError,Fid, FidErrorr)
+
+    return cFid, Fid

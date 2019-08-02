@@ -47,20 +47,20 @@ mps = MPS(POVM=povm_,Number_qubits=MAX_LENGTH,MPS="GHZ")
 bias = povm.getinitialbias(initial_state)
 
 # define target state
-povm.construct_psi()
-#povm.construct_ham()
-#psi, E = povm.ham_eigh()
-#psi = 1/2.0 * np.array([1.,1.,1.,-1], dtype=complex)
-## GHZ state
-psi_t = povm.psi
-psi = np.zeros(2**MAX_LENGTH)
-psi[0] = 1.
-psi[-1] = 1.
-psi = psi/ np.sqrt(2)
-pho = np.outer(psi, np.conjugate(psi))
-pho_t = np.outer(psi_t, np.conjugate(psi_t))
-prob = ncon((pho,povm.Mn),([1,2],[-1,2,1])).real
-prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
+#povm.construct_psi()
+##povm.construct_ham()
+##psi, E = povm.ham_eigh()
+##psi = 1/2.0 * np.array([1.,1.,1.,-1], dtype=complex)
+### GHZ state
+#psi_t = povm.psi
+#psi = np.zeros(2**MAX_LENGTH)
+#psi[0] = 1.
+#psi[-1] = 1.
+#psi = psi/ np.sqrt(2)
+#pho = np.outer(psi, np.conjugate(psi))
+#pho_t = np.outer(psi_t, np.conjugate(psi_t))
+#prob = ncon((pho,povm.Mn),([1,2],[-1,2,1])).real
+#prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
 
 
 # define ansatz
@@ -71,15 +71,15 @@ if LOAD==1:
   ansatz.load_weights('./models/transformer2')
 
 # starting fidelity
-print('starting fidelity')
-prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size, ansatz))
-pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
-cFid = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
-Fid = ncon((pho,pho_povm),([1,2],[2,1]))
-cFid_t = np.dot(np.sqrt(prob_t), np.sqrt(prob_povm))
-Fid_t = ncon((pho_t,pho_povm),([1,2],[2,1]))
-print('target fidelity:', cFid, Fid)
-print('initial fidelity:', cFid_t, Fid_t)
+#print('starting fidelity')
+#prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size, ansatz))
+#pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
+#cFid = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
+#Fid = ncon((pho,pho_povm),([1,2],[2,1]))
+#cFid_t = np.dot(np.sqrt(prob_t), np.sqrt(prob_povm))
+#Fid_t = ncon((pho_t,pho_povm),([1,2],[2,1]))
+#print('target fidelity:', cFid, Fid)
+#print('initial fidelity:', cFid_t, Fid_t)
 
 #plt.figure(1)
 #plt.bar(np.arange(4**MAX_LENGTH),prob)
@@ -136,10 +136,10 @@ for t in range(T):
     sites=SITE[i]
     gate = P_GATE[i]
     gtype = int(gate.ndim/2)
-    kron_gate = povm.kron_gate(GATE[i], sites[0], MAX_LENGTH)
-    psi_t = psi_t @ kron_gate
-    pho_t = np.outer(psi_t, np.conjugate(psi_t))
-    prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
+    #kron_gate = povm.kron_gate(GATE[i], sites[0], MAX_LENGTH)
+    #psi_t = psi_t @ kron_gate
+    #pho_t = np.outer(psi_t, np.conjugate(psi_t))
+    #prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
 
     samples_lP_co = reverse_samples(Ndataset, batch_size, gate, target_vocab_size, sites, ansatz)
     #samples_lP_co = forward_samples(Ndataset, batch_size, ansatz)
@@ -173,7 +173,8 @@ for t in range(T):
 
                 samp,llpp = ansatz.sample(1000) # get samples from the mode
                 #cFid, Fid = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, pho, ansatz)
-                cFid_t, Fid_t = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob_t, pho_t, ansatz)
+                #cFid_t, Fid_t = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob_t, pho_t, ansatz)
+                cFid_t, Fid_t = Fidelity_test_mps(samp, llpp, MAX_LENGTH, target_vocab_size, mps, ansatz)
                 #Fidelity.append(np.array([cFid, Fid]))
                 Fidelity.append(np.array([cFid_t, Fid_t]))
 
@@ -185,4 +186,5 @@ np.savetxt('./data/Fidelity.txt',Fidelity)
 
 
 ## final fidelity
-cFid, Fid = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, pho, ansatz)
+#cFid, Fid = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, pho, ansatz)
+cFid, Fid = Fidelity_test_mps(samp, llpp, MAX_LENGTH, target_vocab_size, mps, ansatz)

@@ -4,7 +4,7 @@ export OMP_NUM_THREADS=1
 
 NOW=$(date +"%m-%d-%Y")
 num=1
-N=2     # number of qubit
+N=4     # number of qubit
 T=1     # number of time step
 EPOCH=2    # number of epoch
 BATCH=1000 # batch size
