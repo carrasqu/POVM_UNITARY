@@ -667,14 +667,15 @@ def compute_observables(obs, site, samp):
 
 
 def compute_energy(hl_ob, x_ob, Nqubit, samp):
+    Ns = samp.shape[0]
     Coef = compute_observables(x_ob, [Nqubit-1],samp)
     for i in range(Nqubit-1):
         Coef += compute_observables(hl_ob, [i,i+1], samp)
     Coef2 = tf.math.square(Coef, Coef)
     Coef_mean = tf.reduce_mean(Coef)
     Coef2_mean = tf.reduce_mean(Coef2)
-    return Coef_mean, tf.math.sqrt(Coef2_mean - Coef_mean**2)
-    #return Coef, Coef2
+    Err = tf.math.sqrt( (Coef2_mean- Coef_mean**2)/Ns)
+    return Coef_mean, Err
 
 
 def compute_energy_mpo(Hp, S):
