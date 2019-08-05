@@ -292,7 +292,7 @@ class Transformer(tf.keras.Model):
 
     return final_output, attention_weights
 
-
+  @tf.function
   def sample(self,Nsamples=1000):
 
     MAX_LENGTH = self.decoder.max_length
@@ -339,6 +339,7 @@ class Transformer(tf.keras.Model):
     return output,logP #, attention_weights
 
 
+  @tf.function
   def call(self,config,training=False):
 
     MAX_LENGTH = self.decoder.max_length
@@ -629,7 +630,7 @@ def Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, ph
 
     cFid, cFidError, KL, KLError = mps.cFidelity(tf.cast(samp,dtype=tf.int64),llpp)
     Fid, FidErrorr = mps.Fidelity(tf.cast(samp,dtype=tf.int64))
-    print('cFid: ', cFid, cFidError,Fid, FidErrorr)
+    print('cFid_mps: ', cFid, cFidError,Fid, FidErrorr)
 
     prob_povm = np.exp(vectorize(MAX_LENGTH, target_vocab_size, ansatz))
     pho_povm = ncon((prob_povm,povm.Ntn),([1],[1,-1,-2]))
@@ -638,7 +639,7 @@ def Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, ph
     cFid2 = np.dot(np.sqrt(prob), np.sqrt(prob_povm))
     #Fid2 = ncon((pho,pho_povm),([1,2],[2,1])) ## true for 2 qubit
     Fid2 = np.square(np.trace(sp.linalg.sqrtm(pho @ pho_povm @pho))) ## true for pure state pho
-    print('cFid2: ', cFid2, Fid2)
+    print('cFid_ED: ', cFid2, Fid2)
 
     a = np.array(list(it.product(range(4),repeat = MAX_LENGTH)), dtype=np.uint8)
     l = np.sum(np.exp(ansatz(a)))
@@ -650,6 +651,62 @@ def Fidelity_test_mps(samp, llpp, MAX_LENGTH, target_vocab_size, mps, ansatz):
 
     cFid, cFidError, KL, KLError = mps.cFidelity(tf.cast(samp,dtype=tf.int64),llpp)
     Fid, FidErrorr = mps.Fidelity(tf.cast(samp,dtype=tf.int64))
-    print('cFid: ', cFid, cFidError,Fid, FidErrorr)
+    print('cFid_mps: ', cFid, cFidError,Fid, FidErrorr)
 
     return cFid, Fid
+
+def compute_observables(obs, site, samp):
+    ndim = int(tf.size(tf.shape(obs)))
+    if tf.math.equal(ndim, 1):
+        indices = tf.cast(tf.reshape(samp[:,site[0]],[tf.shape(samp)[0],1]),tf.int32)
+    else:
+        indices = tf.cast(tf.concat([tf.reshape(samp[:,site[0]],[tf.shape(samp)[0],1]),tf.reshape(samp[:,site[1]],[tf.shape(samp)[0],1])],1),tf.int32)
+    Coef = tf.gather_nd(obs, indices)
+
+    return Coef
+
+
+def compute_energy(hl_ob, x_ob, Nqubit, samp):
+    Coef = compute_observables(x_ob, [Nqubit-1],samp)
+    for i in range(Nqubit-1):
+        Coef += compute_observables(hl_ob, [i,i+1], samp)
+    Coef2 = tf.math.square(Coef, Coef)
+    Coef_mean = tf.reduce_mean(Coef)
+    Coef2_mean = tf.reduce_mean(Coef2)
+    return Coef_mean, tf.math.sqrt(Coef2_mean - Coef_mean**2)
+    #return Coef, Coef2
+
+
+def compute_energy_mpo(Hp, S):
+    E = 0.0;
+    E2 = 0.0;
+    N = len(Hp)
+    Ns = S.shape[0]
+    for i in range(Ns):
+
+        # contracting the entire TN for each sample S[i,:]
+        eT = Hp[0][S[i,0],:];
+
+        for j in range(1,N-1):
+            eT = ncon((eT,Hp[j][:,S[i,j],:]),([1],[1,-1]));
+
+        j = N-1
+        eT = ncon((eT,Hp[j][:,S[i,j]]),([1],[1]));
+        #print i, eT
+        E = E + eT;
+        E2 = E2 + eT**2;
+        Fest=E/float(i+1);
+        F2est=E2/float(i+1);
+        Error = np.sqrt( np.abs( F2est-Fest**2 )/float(i+1));
+        #print i,np.real(Fest),Error
+        #disp([i,i/Ns, real(Fest), real(Error)])
+        #fflush(stdout);
+
+    E2 = E2/float(Ns);
+
+    E = np.abs(E/float(Ns));
+
+    Error = np.sqrt( np.abs( E2-E**2 )/float(Ns));
+
+    return np.real(E), Error
+

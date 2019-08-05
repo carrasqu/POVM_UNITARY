@@ -82,6 +82,22 @@ class POVM():
             self.v4=np.array([-np.sqrt(2.0)/3.0, -np.sqrt(2.0/3.0), -1.0/3.0 ]);
             self.M[3,:,:]=1.0/4.0*( self.I + self.v4[0]*self.s1+self.v4[1]*self.s2+self.v4[2]*self.s3);
 
+        if POVM=='Tetra_pos':
+            self.K=4;
+            self.M=np.zeros((self.K,2,2),dtype=complex);
+
+            self.v1=np.array([1.0, 1.0, 1.0])/np.sqrt(3);
+            self.M[0,:,:]=1.0/4.0*( self.I + self.v1[0]*self.s1+self.v1[1]*self.s2+self.v1[2]*self.s3);
+
+            self.v2=np.array([1.0, -1.0, -1.0])/np.sqrt(3);
+            self.M[1,:,:]=1.0/4.0*( self.I + self.v2[0]*self.s1+self.v2[1]*self.s2+self.v2[2]*self.s3);
+
+            self.v3=np.array([-1.0, 1.0, -1.0])/np.sqrt(3);
+            self.M[2,:,:]=1.0/4.0*( self.I + self.v3[0]*self.s1+self.v3[1]*self.s2+self.v3[2]*self.s3);
+
+            self.v4=np.array([-1.0, -1.0, 1.0])/np.sqrt(3);
+            self.M[3,:,:]=1.0/4.0*( self.I + self.v4[0]*self.s1+self.v4[1]*self.s2+self.v4[2]*self.s3);
+
         elif POVM=='Trine':
             self.K=3;
             self.M=np.zeros((self.K,2,2),dtype=complex);
@@ -93,18 +109,10 @@ class POVM():
 
 
         #% T matrix and its inverse
-        self.t = ncon((self.M,self.M),([-1,1,2],[ -2,2,1]));
+        self.t = ncon((self.M,self.M),([-1,1,2],[ -2,2,1])).real;
         self.it = np.linalg.inv(self.t);
         # dual frame of M
         self.Nt = ncon((self.it,self.M),([-1,1],[1,-2,-3]))
-        # Nqubit tensor product of frame Mn and dual frame Ntn
-        self.Ntn = self.Nt.copy()
-        self.Mn = self.M.copy()
-        for i in range(self.N-1):
-          self.Ntn = ncon((self.Ntn, self.Nt),([-1,-3,-5],[-2,-4,-6]))
-          self.Mn = ncon((self.Mn, self.M),([-1,-3,-5],[-2,-4,-6]))
-          self.Ntn = np.reshape(self.Ntn, (4**(i+2),2**(i+2),2**(i+2)))
-          self.Mn = np.reshape(self.Mn, (4**(i+2),2**(i+2),2**(i+2)))
 
 
         # Tensor for expectation value
@@ -149,10 +157,12 @@ class POVM():
         # time evolution gate
         self.hl = self.Jz*np.kron(self.Z,self.Z) #+ self.Jz*np.kron(self.Y,self.Y)
 
-        self.hl = self.hl +  self.hx*0.5*(np.kron(self.X,self.I)+np.kron(self.I,self.X))
+        #self.hl = self.hl +  self.hx*(np.kron(self.X,self.I)+np.kron(self.I,self.X))
+        self.hl = self.hl +  self.hx*np.kron(self.X,self.I)
         self.hl = -np.reshape(self.hl,(2,2,2,2))
 
-        self.sx = np.reshape(0.5*np.kron(self.X,self.I)+ 0.5*np.kron(self.I,self.X),(2,2,2,2))
+        #self.sx = np.reshape(np.kron(self.X,self.I)+ np.kron(self.I,self.X),(2,2,2,2))
+        self.sx = np.reshape(np.kron(self.X,self.I),(2,2,2,2))
 
         self.exp_hl = np.reshape(-self.eps*self.hl,(4,4))
         self.exp_hl = expm(self.exp_hl)
@@ -165,13 +175,40 @@ class POVM():
         self.Up = self.two_body_gate(self.mat)
         self.Up2 = self.two_body_gate(self.mat2)
 
-        #self.Up = ncon((self.M,self.M,self.mat,self.M,self.M,self.it,self.it,np.conj(self.mat)),([-1,9,1],[-2,10,2],[1,2,3,4],[5,3,7],[6,4,8],[5,-3],[6,-4],[9,10,7,8])).real
-        #self.Up2 = ncon((self.M,self.M,self.mat2,self.M,self.M,self.it,self.it,np.conj(self.mat2)),([-1,9,1],[-2,10,2],[1,2,3,4],[5,3,7],[6,4,8],[5,-3],[6,-4],[9,10,7,8])).real
-
-        #self.Up = np.reshape(np.transpose(np.reshape(self.Up,(self.K**2,self.K**2))),(self.K,self.K,self.K,self.K))
-
         #self.hlp = ncon((self.it,self.M,self.hl,self.it,self.M),([1,-1],[1,3,2],[2,5,3,6],[4,-2],[4,6,5])).real
         #self.sxp = ncon((self.it,self.M,self.sx,self.it,self.M),([1,-1],[1,3,2],[2,5,3,6],[4,-2],[4,6,5])).real
+
+        # Hamiltonian observable list
+        self.hl_ob = ncon((self.hl,self.Nt,self.Nt), ([1,2,3,4],[-1,3,1],[-2,4,2])).real
+        self.x_ob = ncon((-self.hx*self.X,self.Nt), ([1,2],[-1,2,1])).real
+
+
+
+        # MPO H
+        self.Ham = []
+
+        mat = np.zeros((3,3,2,2))
+        mat[0,0] = self.I
+        mat[1,0] = -self.Z
+        mat[2,0] = -self.X*self.hx
+        mat[2,1] = self.Z
+        mat[2,2] = self.I
+
+        self.Ham.append(mat[2])
+        for i in range(1,self.N-1):
+            self.Ham.append(mat)
+        self.Ham.append(mat[:,0,:,:])
+
+        # MPS for Hamiltonian in probability space
+        self.Hp = []
+        mat = ncon((self.Ham[0],self.M,self.it),([-2,3,1],[2,1,3],[2,-1]))
+        self.Hp.append(mat)
+        for i in range(1,self.N-1):
+            mat = ncon((self.Ham[i],self.M,self.it),([-1,-3,3,1],[2,1,3],[2,-2]))
+            self.Hp.append(mat)
+        mat = ncon((self.Ham[self.N-1],self.M,self.it),([-1,3,1],[2,1,3],[2,-2]))
+        self.Hp.append(mat)
+
 
 
     def softmax(self,x):
@@ -205,15 +242,15 @@ class POVM():
       l_basis = basis(self.N)
       for i in range(2**self.N):
         for j in range(self.N-1):
-          self.ham[i, i] += - self.Jz *l_basis[i, j] * l_basis[i, j+1]
+          self.ham[i, i] += - self.Jz *(4.0*l_basis[i, j] * l_basis[i, j+1] - 2.0*l_basis[i,j]- 2.0*l_basis[i,j+1] +1. )
           hop_basis = l_basis[i,:].copy()
           hop_basis[j] =  int(abs(1-hop_basis[j]))
           i_hop = index(hop_basis)
-          self.ham[i, i_hop] = -self.hx * 0.5
+          self.ham[i, i_hop] = -self.hx
         hop_basis = l_basis[i,:].copy()
         hop_basis[self.N-1] =  int(abs(1-hop_basis[self.N-1]))
         i_hop = index(hop_basis)
-        self.ham[i, i_hop] = -self.hx * 0.5
+        self.ham[i, i_hop] = -self.hx
 
     def ham_eigh(self):
       w, v = np.linalg.eigh(self.ham)
@@ -276,3 +313,12 @@ class POVM():
       g = np.kron(g, I_R)
       return g
 
+    def construct_Nframes(self):
+      # Nqubit tensor product of frame Mn and dual frame Ntn
+      self.Ntn = self.Nt.copy()
+      self.Mn = self.M.copy()
+      for i in range(self.N-1):
+        self.Ntn = ncon((self.Ntn, self.Nt),([-1,-3,-5],[-2,-4,-6]))
+        self.Mn = ncon((self.Mn, self.M),([-1,-3,-5],[-2,-4,-6]))
+        self.Ntn = np.reshape(self.Ntn, (4**(i+2),2**(i+2),2**(i+2)))
+        self.Mn = np.reshape(self.Mn, (4**(i+2),2**(i+2),2**(i+2)))

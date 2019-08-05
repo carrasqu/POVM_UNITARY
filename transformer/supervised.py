@@ -5,17 +5,72 @@ from transformer3 import *
 import itertools as it
 import tensorflow as tf
 
+@tf.function
+def generate_samples(log_P, batch_size, size, Nqubit, base=4):
+    steps = int(size / batch_size)
 
-def generate_samples(logP_fn, batch_size, Nqubit, base=4):
-    cat = tf.random.categorical(logits=logP_fn, num_samples=int(batch_size))
-    config = tf.map_fn(lambda x: np.array(list(np.base_repr(int(x), base=4, padding=Nqubit)[-Nqubit:]),dtype=int) , tf.transpose(cat))
-    config_prob = tf.exp(tf.map_fn(lambda x: logP_fn[0,x], cat[0], dtype=tf.float32))
-    return (cat, config, config_prob)
+    CAT = []
+    CONFIG = []
+    CONFIG_P = []
+    for i in range(steps):
+        cat = tf.random.categorical(logits=log_P, num_samples=int(batch_size), dtype=tf.int32)
+        config = tf.math.floormod(tf.bitwise.right_shift(tf.expand_dims(cat[0],1), tf.range(Nqubit)), 2)
+         #config = tf.map_fn(lambda x: np.array(list(np.base_repr(int(x), base=4, padding=Nqubit)[-Nqubit:]),dtype=np.float32) , tf.transpose(cat))
+
+        ## TODO: use gather
+        config_prob = tf.exp(tf.map_fn(lambda x: log_P[0,x], cat[0], dtype=tf.float32))
+        config_prob = tf.expand_dims(config_prob,1)
+
+        CAT.append(cat[0])
+        CONFIG.append(config)
+        CONFIG_P.append(config_prob)
+
+    CAT = tf.convert_to_tensor(CAT)
+    CONFIG = tf.convert_to_tensor(CONFIG, dtype=np.float32)
+    CONFIG_P = tf.convert_to_tensor(CONFIG_P)
+
+    return (CAT, CONFIG, CONFIG_P)
+
+
+def loss_fn(config, config_prob, ansatz):
+    lnP = ansatz(config,training=True)
+    loss = -tf.reduce_mean(lnP) # KL div
+    #loss = tf.reduce_mean(tf.abs(tf.exp(lnP)-config_prob))
+    #loss_k = tf.keras.losses.KLDivergence()
+    #print('loss:', loss)
+    return loss
+
+
+@tf.function
+def train_step(loss_fn, optimizer, samples, samples_p, ansatz):
+    ept = tf.random.shuffle(tf.concat([samples,samples_p],axis=-1))
+
+    nsteps = ept.shape[0]
+    bcount = 0
+    loss = 0.
+
+    for idx in range(nsteps):
+        print('nsteps', idx)
+        batch = ept[idx]
+        config = tf.cast(batch[:,:-1], dtype=tf.int32)
+        config_prob = batch[:,-1]
+        bcount = bcount + 1
+        with tf.GradientTape() as tape:
+            loss = loss_fn(config,config_prob,ansatz)
+
+        gradients = tape.gradient(loss, ansatz.trainable_variables)
+        optimizer.apply_gradients(zip(gradients, ansatz.trainable_variables))
+
+    return loss
 
 
 
-N = int(2)
+## initial setup
+N = int(4)
+batch_size =1e2
+sample_size = 2e2
 a = POVM(POVM='Tetra',Number_qubits=N, eps=1e-2)
+a.construct_Nframes()
 a.construct_ham()
 a.construct_psi()
 psi_t = a.psi.copy()
@@ -24,18 +79,17 @@ psi_g, E = a.ham_eigh()
 
 # convert to POVM probability
 pho_g = np.outer(psi_g, np.conjugate(psi_g))
-prob_g = ncon((pho_g,a.Mn),([1,2],[-1,2,1])).real
-log_prob = tf.math.log([prob_g+1e-13], dtype=tf.float32)
-#cat2 = tf.random.categorical(logits=log_prob, num_samples=int(1e4))
-#config = tf.map_fn(lambda x: np.array(list(np.base_repr(int(x), base=4, padding=N)[-N:]),dtype=int) , tf.transpose(cat2))
-#config_prob = tf.map_fn(lambda x: prob_g[x], cat2[0], dtype=tf.float32)
-cat2, config, config_prob = generate
+prob_g = ncon((pho_g,a.Mn),([1,2],[-1,2,1])).real.astype(np.float32)
+log_prob = tf.math.log([prob_g+1e-13])
+
+cat, samples, samples_p = generate_samples(log_prob, batch_size, size=sample_size, Nqubit=N, base=4)
 
 plt.figure(1)
-plt.hist(cat2[0], bins=4**N, density=True)
+plt.hist(np.reshape(cat,-1), bins=4**N, density=True)
 plt.figure(2)
 plt.bar(np.arange(4**N),prob_g)
 #plt.show()
+assert False, 'stop'
 
 
 # construct ansatz
@@ -61,39 +115,15 @@ print('initial fidelity:', cFid2)
 
 
 
+
 # training
 optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
-loss_k = tf.keras.losses.KLDivergence()
-
-
-assert False, 'stop'
-
-
-def loss_fn(config, config_prob, ansatz):
-
-	lnP = ansatz(config,training=True)
-	loss = -tf.reduce_mean(lnP) # KL div
-	#loss = tf.reduce_mean(tf.abs(tf.exp(lnP)-config_prob))
-	#loss = loss_k(config_prob, tf.exp(lnP))
-	return loss #, loss2
-
-
-@tf.function
-def train_step(loss_fn, optimizer, epoch, samples, samples_p, ansatz):
-	with tf.GradientTape() as tape:
-		loss = loss_fn(samples,samples_p,ansatz)
-
-	gradients = tape.gradient(loss, ansatz.trainable_variables)
-	optimizer.apply_gradients(zip(gradients, ansatz.trainable_variables))
-	return loss
-
 
 for i in range(10):
-
-	loss_tr = train_step(config, config_prob, ansatz)
-	prob_f = np.exp(ansatz(config_b))
-	print(loss_tr)
-	print(np.sum(prob_f))
+    loss_tr = train_step(loss_fn, optimizer, samples, samples_p, ansatz)
+    prob_f = np.exp(ansatz(config_b))
+    print('epoch complete loss:', loss_tr)
+    print('prob', np.sum(prob_f))
 
 
 #ansatz.compile(optimizer, loss=tf.keras.losses.MeanSquaredError())

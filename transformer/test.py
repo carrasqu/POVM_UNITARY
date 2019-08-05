@@ -6,9 +6,10 @@ import itertools as it
 import tensorflow as tf
 
 
-N = int(2)
-a = POVM(POVM='Tetra',Number_qubits=N, eps=1e-2)
+N = int(4)
+a = POVM(POVM='Tetra_pos',Number_qubits=N, eps=1e-1)
 b = POVM(POVM='Tetra',Number_qubits=N, eps=1e2)
+c = POVM(POVM='4Pauli',Number_qubits=N, eps=1e2)
 
 # check dual frame correctness
 #for i in range(N):
@@ -60,6 +61,7 @@ print(np.linalg.norm(prob3-prob2)<1e-14)
 print(np.linalg.norm(prob4-prob)<1e-14)
 
 # produce Nqubit tensor product Nt and M
+a.construct_Nframes()
 Ntn = a.Nt.copy()
 Mn = a.M.copy()
 for i in range(N-1):
@@ -88,14 +90,18 @@ print('diagonalization works:', np.linalg.norm(diff)<1e-14)
 tau = 0.1
 expH = expm(-tau * a.ham)
 for i in range(100):
-  psi_t = expH @ psi_t
+  #psi_t = expH @ psi_t
+  psi_t = a.exp_hl2 @ psi_t
   psi_t = psi_t / np.linalg.norm(psi_t)
-
 
 Et = np.conjugate(psi_t.transpose()) @ a.ham @ psi_t
 fidelity = np.abs(np.dot(psi_t,psi_g))
 print('full imaginary time fidelity:', fidelity)
 print('full imaginary time energy diff:', Et-E)
+
+psi_b = b.exp_hl2 @ psi
+psi_b = psi_b / np.linalg.norm(psi_b)
+Eb = np.conjugate(psi_b.transpose()) @ a.ham @ psi_b
 
 
 # check dual frame correctness
@@ -110,6 +116,10 @@ for i in range(4):
   p2.append(a.P_gate(a.two_qubit[i]))
   print('dual frame works:', np.linalg.norm(p1[i]-a.p_single_qubit[i])<1e-14)
   print('dual frame works:', np.linalg.norm(p2[i]-a.p_two_qubit[i])<1e-14)
+
+
+
+
 
 assert False, 'stop'
 
