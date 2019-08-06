@@ -550,6 +550,20 @@ def loss_function2(batch,ansatz):
     return loss #, loss2
 
 
+def loss_function3(batch,ansatz):
+
+    ## batch = (samples, lP, co_Pj_sum)
+    target_vocab_size = ansatz.decoder.target_vocab_size
+    batch_size = batch.shape[0]
+
+    samples = tf.cast(batch[:,:-1], dtype=tf.uint8) # c are configurations
+    batch_lP = ansatz(samples,training=True)
+    update_Pi = batch[:, -1]
+
+    loss = -tf.reduce_sum( update_Pi * batch_lP)
+    return loss
+
+
 def vectorize(num_sites, K, ansatz):
     l_basis = []
     for i in range(K**num_sites):
@@ -562,48 +576,104 @@ def vectorize(num_sites, K, ansatz):
     return lnP
 
 
-
-
 def reverse_samples(Ndataset, batch_size, gate, target_vocab_size, sites, ansatz):
 
     gate_factor = int(gate.ndim**2)
-    if Ndataset != 0:
-        ## it ensures at least one batch size samples, since Ncall can be zero
-        Ncalls = Ndataset /batch_size
-        samples,lP = ansatz.sample(batch_size) # get samples from the model
-        lP = np.reshape(lP,[-1,1]) ## necessary for concatenate
+    ## it ensures at least one batch size samples, since Ncall can be zero
+    Ncalls = Ndataset /batch_size
+    samples,lP = ansatz.sample(batch_size) # get samples from the model
+    lP = np.reshape(lP,[-1,1]) ## necessary for concatenate
+    if gate_factor == 16:
+        flip,co = flip2_reverse_tf(samples,gate,target_vocab_size,sites)
+    else:
+        flip,co = flip1_reverse_tf(samples,gate,target_vocab_size,sites)
+
+    flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
+    Pj = tf.exp(ansatz(flip))
+    co_Pj = tf.reshape(co*Pj,(batch_size, gate_factor))
+    co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
+    co_Pj_sum = np.reshape(co_Pj_sum,[-1,1])
+
+    for k in range(int(Ncalls)):
+        sa,llpp = ansatz.sample(batch_size)
+        samples = np.vstack((samples,sa))
+        llpp =np.reshape(llpp,[-1,1])
+        lP =  np.vstack((lP,llpp))
         if gate_factor == 16:
-            flip,co = flip2_reverse_tf(samples,gate,target_vocab_size,sites)
+            fp,coef = flip2_reverse_tf(sa,gate,target_vocab_size,sites)
         else:
-            flip,co = flip1_reverse_tf(samples,gate,target_vocab_size,sites)
-
-        flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
-        Pj = tf.exp(ansatz(flip))
-        co_Pj = tf.reshape(co*Pj,(batch_size, gate_factor))
-        co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
-        co_Pj_sum = np.reshape(co_Pj_sum,[-1,1])
-
-        for k in range(int(Ncalls)):
-            sa,llpp = ansatz.sample(batch_size)
-            samples = np.vstack((samples,sa))
-            llpp =np.reshape(llpp,[-1,1])
-            lP =  np.vstack((lP,llpp))
-            if gate_factor == 16:
-                fp,coef = flip2_reverse_tf(sa,gate,target_vocab_size,sites)
-            else:
-                fp,coef = flip1_reverse_tf(sa,gate,target_vocab_size,sites)
-            fp = tf.cast(fp, dtype=tf.uint8) # c are configurations
-            pj = tf.exp(ansatz(fp))
-            coef_pj = tf.reshape(coef*pj,(batch_size, gate_factor))
-            coef_pj_sum = tf.reduce_sum(coef_pj, axis=1)
-            coef_pj_sum = np.reshape(coef_pj_sum,[-1,1])
-            co_Pj_sum =  np.vstack((co_Pj_sum,coef_pj_sum))
+            fp,coef = flip1_reverse_tf(sa,gate,target_vocab_size,sites)
+        fp = tf.cast(fp, dtype=tf.uint8) # c are configurations
+        pj = tf.exp(ansatz(fp))
+        coef_pj = tf.reshape(coef*pj,(batch_size, gate_factor))
+        coef_pj_sum = tf.reduce_sum(coef_pj, axis=1)
+        coef_pj_sum = np.reshape(coef_pj_sum,[-1,1])
+        co_Pj_sum =  np.vstack((co_Pj_sum,coef_pj_sum))
 
     samples = tf.stop_gradient(samples)
     co_Pj_sum = tf.stop_gradient(co_Pj_sum)
     lP = tf.stop_gradient(lP)
 
     return (samples, lP, co_Pj_sum)
+
+
+# reverse samples for a sequence of gates ob TFIM ham
+def reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, hl, x, tau, ansatz):
+
+    ## it ensures at least one batch size samples, since Ncall can be zero
+    Ncalls = Ndataset /batch_size
+    samples,lP = ansatz.sample(batch_size) # get samples from the model
+    lP = np.reshape(lP,[-1,1]) ## necessary for concatenate
+    Prob = tf.exp(lP)
+    update_Pi = tf.zeros([batch_size,], tf.int32)
+
+    flip,co = flip1_reverse_tf(samples,x,target_vocab_size,site=[Nqubit-1])
+    flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
+    Pj = tf.exp(ansatz(flip))
+    co_Pj = tf.reshape(co*Pj,(batch_size, 4))
+    co_Pj_sum = tf.reduce_sum(co_Pj, axis=1) / tf.cast(batch_size,tf.float32)
+    update_Pi += tf.math.div(co_Pj_sum, Prob)
+    for i in range(Nqubit-1):
+        flip,co = flip2_reverse_tf(samples,hl,target_vocab_size,site=[i,i+1])
+        flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
+        Pj = tf.exp(ansatz(flip))
+        co_Pj = tf.reshape(co*Pj,(batch_size, 16))
+        co_Pj_sum = tf.reduce_sum(co_Pj, axis=1) / tf.cast(batch_size,tf.float32)
+        update_Pi += tf.math.div(co_Pj_sum, Prob)
+
+    update_Pi = Prob - tau * update_Pi
+    update_Pi = np.reshape(update_Pi,[-1,1])
+
+
+    for k in range(int(Ncalls)):
+        sa,llpp = ansatz.sample(batch_size)
+        samples = np.vstack((samples,sa))
+        llpp =np.reshape(llpp,[-1,1])
+        pb = tf.exp(llpp)
+        new_pi = tf.zeros([batch_size,], tf.int32)
+
+        flip,co = flip1_reverse_tf(sa,x,target_vocab_size,site=[Nqubit-1])
+        flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
+        Pj = tf.exp(ansatz(flip))
+        co_Pj = tf.reshape(co*Pj,(batch_size, 4))
+        co_Pj_sum = tf.reduce_sum(co_Pj, axis=1) / tf.cast(batch_size,tf.float32)
+        new_pi += tf.math.div(co_Pj_sum, pb)
+        for i in range(Nqubit-1):
+            flip,co = flip2_reverse_tf(sa,hl,target_vocab_size,site=[i,i+1])
+            flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
+            Pj = tf.exp(ansatz(flip))
+            co_Pj = tf.reshape(co*Pj,(batch_size, 16))
+            co_Pj_sum = tf.reduce_sum(co_Pj, axis=1) / tf.cast(batch_size,tf.float32)
+            new_pi += tf.math.div(co_Pj_sum, pb)
+
+        new_pi = pb - tau * new_pi
+        new_pi = np.reshape(new_pi,[-1,1])
+        update_Pi = np.vstack((update_Pi, new_pi))
+
+    samples = tf.stop_gradient(samples)
+    update_Pi = tf.stop_gradient(update_Pi)
+
+    return (samples, update_Pi)
 
 
 def forward_samples(Ndataset, batch_size, ansatz):
@@ -704,10 +774,42 @@ def compute_energy_mpo(Hp, S):
         #fflush(stdout);
 
     E2 = E2/float(Ns);
-
     E = np.abs(E/float(Ns));
-
     Error = np.sqrt( np.abs( E2-E**2 )/float(Ns));
-
     return np.real(E), Error
+
+
+@tf.function
+def train_step(flip,co,gtype,batch_size,ansatz):
+
+    with tf.GradientTape() as tape:
+        loss = loss_function(flip,co,gtype,batch_size,ansatz)
+
+    gradients = tape.gradient(loss, ansatz.trainable_variables)
+    #print(gradients)
+    optimizer.apply_gradients(zip(gradients, ansatz.trainable_variables))
+    return loss
+
+@tf.function
+def train_step2(batch,ansatz):
+
+    with tf.GradientTape() as tape:
+        loss = loss_function2(batch,ansatz)
+
+    gradients = tape.gradient(loss, ansatz.trainable_variables)
+    #print(gradients)
+    optimizer.apply_gradients(zip(gradients, ansatz.trainable_variables))
+    return loss
+
+
+@tf.function
+def train_step3(batch,ansatz):
+
+    with tf.GradientTape() as tape:
+        loss = loss_function2(batch,ansatz)
+
+    gradients = tape.gradient(loss, ansatz.trainable_variables)
+    #print(gradients)
+    optimizer.apply_gradients(zip(gradients, ansatz.trainable_variables))
+    return loss
 

@@ -21,6 +21,19 @@ c = POVM(POVM='4Pauli',Number_qubits=N, eps=1e2)
 #    assert False, 'dual frame test fails'
 #print('pass dual frame test')
 
+# test commuting and anti-commuting operators
+#print('a_hl_com imag:', np.sum(a.hl_com.imag>1e-15))
+#print('a_hl_anti real:', np.sum(a.hl_anti.real>1e-15))
+#print('a_x_com imag:', np.sum(a.x_com.imag>1e-15))
+#print('a_x_anti real:', np.sum(a.x_anti.real>1e-15))
+#print('b_hl_com imag:', np.sum(b.hl_com.imag>1e-15))
+#print('b_hl_anti real:', np.sum(b.hl_anti.real>1e-15))
+#print('b_x_com imag:', np.sum(b.x_com.imag>1e-15))
+#print('b_x_anti real:', np.sum(b.x_anti.real>1e-15))
+#print('c_hl_com imag:', np.sum(c.hl_com.imag>1e-15))
+#print('c_hl_anti real:', np.sum(c.hl_anti.real>1e-15))
+#print('c_x_com imag:', np.sum(c.x_com.imag>1e-15))
+#print('c_x_anti real:', np.sum(c.x_anti.real>1e-15))
 
 # construct 4 qubit wave function and reshape its tensor form
 np.random.seed(30)
@@ -89,9 +102,9 @@ diff = a.ham @ psi_g - E * psi_g
 print('diagonalization works:', np.linalg.norm(diff)<1e-14)
 tau = 0.1
 expH = expm(-tau * a.ham)
-for i in range(100):
+for i in range(10):
   #psi_t = expH @ psi_t
-  psi_t = a.exp_hl2 @ psi_t
+  psi_t = (np.eye(2**N,2**N)-tau*a.ham) @ psi_t
   psi_t = psi_t / np.linalg.norm(psi_t)
 
 Et = np.conjugate(psi_t.transpose()) @ a.ham @ psi_t
@@ -99,9 +112,9 @@ fidelity = np.abs(np.dot(psi_t,psi_g))
 print('full imaginary time fidelity:', fidelity)
 print('full imaginary time energy diff:', Et-E)
 
-psi_b = b.exp_hl2 @ psi
-psi_b = psi_b / np.linalg.norm(psi_b)
-Eb = np.conjugate(psi_b.transpose()) @ a.ham @ psi_b
+#psi_b = b.exp_hl2 @ psi
+#psi_b = psi_b / np.linalg.norm(psi_b)
+#Eb = np.conjugate(psi_b.transpose()) @ a.ham @ psi_b
 
 
 # check dual frame correctness
@@ -116,8 +129,6 @@ for i in range(4):
   p2.append(a.P_gate(a.two_qubit[i]))
   print('dual frame works:', np.linalg.norm(p1[i]-a.p_single_qubit[i])<1e-14)
   print('dual frame works:', np.linalg.norm(p2[i]-a.p_two_qubit[i])<1e-14)
-
-
 
 
 
