@@ -155,11 +155,11 @@ class POVM():
 
 
         # time evolution gate
-        self.hl = self.Jz*np.kron(self.Z,self.Z) #+ self.Jz*np.kron(self.Y,self.Y)
 
-        #self.hl = self.hl +  self.hx*(np.kron(self.X,self.I)+np.kron(self.I,self.X))
-        self.hl = self.hl +  self.hx*np.kron(self.X,self.I)
+        self.hl = self.Jz*np.kron(self.Z,self.Z) +  self.hx*np.kron(self.X,self.I)
         self.hl = -np.reshape(self.hl,(2,2,2,2))
+        self.hlx = self.Jz*np.kron(self.Z,self.Z) +  self.hx*(np.kron(self.X,self.I)+np.kron(self.I,self.X))
+        self.hlx = -np.reshape(self.hlx,(2,2,2,2))
 
         #self.sx = np.reshape(np.kron(self.X,self.I)+ np.kron(self.I,self.X),(2,2,2,2))
         self.sx = np.reshape(np.kron(self.X,self.I),(2,2,2,2))
@@ -179,20 +179,23 @@ class POVM():
         #self.sxp = ncon((self.it,self.M,self.sx,self.it,self.M),([1,-1],[1,3,2],[2,5,3,6],[4,-2],[4,6,5])).real
 
         # Hamiltonian observable list
-        self.hl_ob = ncon((self.hl,self.Nt,self.Nt), ([1,2,3,4],[-1,3,1],[-2,4,2])).real
-        self.x_ob = ncon((-self.hx*self.X,self.Nt), ([1,2],[-1,2,1])).real
+        self.hl_ob = ncon((self.hl,self.Nt,self.Nt), ([1,2,3,4],[-1,3,1],[-2,4,2])).real.astype(np.float32)
+        self.hlx_ob = ncon((self.hlx,self.Nt,self.Nt), ([1,2,3,4],[-1,3,1],[-2,4,2])).real.astype(np.float32)
+        self.x_ob = ncon((-self.hx*self.X,self.Nt), ([1,2],[-1,2,1])).real.astype(np.float32)
 
         # commuting and anti_computing operator
-        hl_Nt = ncon((self.hl,self.Nt,self.Nt),([-1,-2,3,4],[-3,3,-5],[-4,4,-6]))
-        Nt_hl = ncon((self.Nt,self.Nt, self.hl),([-3,-1,3],[-4,-2,4],[3,4,-5,-6]))
-        x_Nt = ncon((-self.hx*self.X,self.Nt),([-1,2],[-2,2,-3]))
-        Nt_x = ncon((self.Nt, -self.hx*self.X),([-2,-1,2],[2,-3]))
-        self.hl_com = ncon((hl_Nt+Nt_hl,self.M,self.M),([1,2,-1,-2,3,4],[-3,3,1],[-4,4,2])).real
-        self.hl_anti = ncon((hl_Nt-Nt_hl,self.M,self.M),([1,2,-1,-2,3,4],[-3,3,1],[-4,4,2])).imag
-        self.x_com = ncon((x_Nt+Nt_x,self.M),([1,-1,2],[-2,2,1])).real
-        self.x_anti = ncon((x_Nt-Nt_x,self.M),([1,-1,2],[-2,2,1])).imag
-
-
+        hl_Nt = ncon((self.hl,self.Nt,self.Nt),([-1,-2,1,2],[-3,1,-5],[-4,2,-6]))
+        Nt_hl = ncon((self.Nt,self.Nt, self.hl),([-3,-1,1],[-4,-2,2],[1,2,-5,-6]))
+        hlx_Nt = ncon((self.hlx,self.Nt,self.Nt),([-1,-2,1,2],[-3,1,-5],[-4,2,-6]))
+        Nt_hlx = ncon((self.Nt,self.Nt, self.hlx),([-3,-1,1],[-4,-2,2],[1,2,-5,-6]))
+        x_Nt = ncon((-self.hx*self.X,self.Nt),([-1,1],[-2,1,-3]))
+        Nt_x = ncon((self.Nt, -self.hx*self.X),([-2,-1,1],[1,-3]))
+        self.hl_com = ncon((hl_Nt+Nt_hl,self.M,self.M),([1,2,-3,-4,3,4],[-1,3,1],[-2,4,2])).real.astype(np.float32)
+        self.hl_anti = ncon((hl_Nt-Nt_hl,self.M,self.M),([1,2,-3,-4,3,4],[-1,3,1],[-2,4,2])).imag.astype(np.float32)
+        self.hlx_com = ncon((hlx_Nt+Nt_hlx,self.M,self.M),([1,2,-3,-4,3,4],[-1,3,1],[-2,4,2])).real.astype(np.float32)
+        self.hlx_anti = ncon((hlx_Nt-Nt_hlx,self.M,self.M),([1,2,-3,-4,3,4],[-1,3,1],[-2,4,2])).imag.astype(np.float32)
+        self.x_com = ncon((x_Nt+Nt_x,self.M),([1,-2,2],[-1,2,1])).real.astype(np.float32)
+        self.x_anti = ncon((x_Nt-Nt_x,self.M),([1,-2,2],[-1,2,1])).imag.astype(np.float32)
 
 
         # MPO H

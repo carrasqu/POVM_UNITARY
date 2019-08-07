@@ -6,10 +6,13 @@ import itertools as it
 import tensorflow as tf
 
 
-N = int(4)
+N = int(2)
 a = POVM(POVM='Tetra_pos',Number_qubits=N, eps=1e-1)
 b = POVM(POVM='Tetra',Number_qubits=N, eps=1e2)
 c = POVM(POVM='4Pauli',Number_qubits=N, eps=1e2)
+a.construct_ham()
+a.construct_psi()
+a.construct_Nframes()
 
 # check dual frame correctness
 #for i in range(N):
@@ -22,8 +25,8 @@ c = POVM(POVM='4Pauli',Number_qubits=N, eps=1e2)
 #print('pass dual frame test')
 
 # test commuting and anti-commuting operators
-#print('a_hl_com imag:', np.sum(a.hl_com.imag>1e-15))
-#print('a_hl_anti real:', np.sum(a.hl_anti.real>1e-15))
+#print('a_hl_com imag:', np.sum(a.hlx_com.imag>1e-15))
+#print('a_hl_anti real:', np.sum(a.hlx_anti.real>1e-15))
 #print('a_x_com imag:', np.sum(a.x_com.imag>1e-15))
 #print('a_x_anti real:', np.sum(a.x_anti.real>1e-15))
 #print('b_hl_com imag:', np.sum(b.hl_com.imag>1e-15))
@@ -49,6 +52,21 @@ pho1 = pho.copy()
 size = np.ones(2*N, dtype=int) * 2
 pho1 = np.reshape(pho1, size)
 
+# check commuting gate and non-commuting gate
+tau = 0.1
+pho_t0 = np.outer(psi, np.conjugate(psi))
+prob_t0 = ncon((pho_t0,a.Mn),([1,2],[-1,2,1])).real
+pho_t = pho_t0.copy()
+pho_t = pho_t0 - tau *( a.ham @ pho_t0 + pho_t0 @ a.ham)
+pho_t1 = pho_t0 - 1j*tau *( a.ham @ pho_t0 - pho_t0 @ a.ham)
+prob_t = ncon((pho_t,a.Mn),([1,2],[-1,2,1])).real
+prob_t1 = ncon((pho_t1,a.Mn),([1,2],[-1,2,1])).real
+hlx_com = a.hlx_com.reshape(16,16)
+hlx_anti = a.hlx_anti.reshape(16,16)
+prob_t2 = prob_t0 - tau*hlx_com @ prob_t0
+prob_t3 = prob_t0 + tau*hlx_anti @ prob_t0
+
+assert False, 'stop'
 
 # convert POVM probability to density matrix in vector basis
 Nt2 = ncon((a.Nt,a.Nt),([-1,-3,-5],[-2,-4,-6]))
@@ -74,7 +92,6 @@ print(np.linalg.norm(prob3-prob2)<1e-14)
 print(np.linalg.norm(prob4-prob)<1e-14)
 
 # produce Nqubit tensor product Nt and M
-a.construct_Nframes()
 Ntn = a.Nt.copy()
 Mn = a.M.copy()
 for i in range(N-1):
@@ -94,10 +111,15 @@ b2 = np.reshape(b2,(4,4))
 
 
 # test imaginary time evolution
-a.construct_ham()
-a.construct_psi()
 psi_t = a.psi.copy()
+#psi_t = np.zeros(2**N)
+#psi_t[0] = 1.
 psi_g, E = a.ham_eigh()
+Et = np.conjugate(psi_t.transpose()) @ a.ham @ psi_t
+fidelity = np.abs(np.dot(psi_t,psi_g))
+print('initial fidelity:', fidelity)
+print('initial energy diff:', Et-E)
+
 diff = a.ham @ psi_g - E * psi_g
 print('diagonalization works:', np.linalg.norm(diff)<1e-14)
 tau = 0.1
@@ -111,6 +133,7 @@ Et = np.conjugate(psi_t.transpose()) @ a.ham @ psi_t
 fidelity = np.abs(np.dot(psi_t,psi_g))
 print('full imaginary time fidelity:', fidelity)
 print('full imaginary time energy diff:', Et-E)
+
 
 #psi_b = b.exp_hl2 @ psi
 #psi_b = psi_b / np.linalg.norm(psi_b)
@@ -131,8 +154,6 @@ for i in range(4):
   print('dual frame works:', np.linalg.norm(p2[i]-a.p_two_qubit[i])<1e-14)
 
 
-
-assert False, 'stop'
 
 # sampling function
 psi_p = np.multiply(psi_g, np.conjugate(psi_g)).real

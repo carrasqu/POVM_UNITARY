@@ -26,7 +26,7 @@ if not os.path.exists("data"):
 num_layers = 2 #4
 d_model = 128 #128
 dff = 128 # 512
-num_heads = 2 # 8
+num_heads = 1 # 8
 
 target_vocab_size = 4 # number of measurement outcomes
 input_vocab_size = target_vocab_size
@@ -75,7 +75,7 @@ if LOAD==1:
 # energy test
 #Et = np.conjugate(psi_t.transpose()) @ povm.ham @ psi_t
 samp,_ = ansatz.sample(10000) # get samples from the mode
-E_samp,E2_samp = compute_energy(povm.hl_ob,povm.x_ob,MAX_LENGTH,samp)
+E_samp,E2_samp = compute_energy(povm.hl_ob,povm.hlx_ob,MAX_LENGTH,samp)
 E_mpo,E2_mpo = compute_energy_mpo(povm.Hp, samp)
 #print('correct E', Et)
 print('samples E', E_samp, E2_samp)
