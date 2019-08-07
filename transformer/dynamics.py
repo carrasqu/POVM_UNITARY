@@ -43,7 +43,7 @@ j_init = 0
 
 povm_='Tetra_pos'
 initial_state='0'
-tau = 2./float(T)
+tau = 0.1/float(T)
 povm = POVM(POVM=povm_, Number_qubits=Nqubit, initial_state=initial_state,Jz=1.0,hx=1.0,eps=tau)
 mps = MPS(POVM=povm_,Number_qubits=Nqubit,MPS="GHZ")
 bias = povm.getinitialbias(initial_state)
@@ -87,16 +87,16 @@ Fid_t = ncon((pho_t,pho_povm),([1,2],[2,1]))
 print('target fidelity:', cFid, Fid)
 print('initial fidelity:', cFid_t, Fid_t)
 
-plt.figure(1)
-plt.bar(np.arange(4**Nqubit),prob_t)
-plt.figure(2)
-plt.bar(np.arange(4**Nqubit),prob_povm)
+#plt.figure(1)
+#plt.bar(np.arange(4**Nqubit),prob_t)
+#plt.figure(2)
+#plt.bar(np.arange(4**Nqubit),prob_povm)
 
 
 # starting energy
-samp,_ = ansatz.sample(10000) # get samples from the mode
-E_samp,E2_samp = compute_energy(povm.hl_ob,povm.hlx_ob,Nqubit,samp)
-print('Beginning energy:', E_samp, E2_samp)
+#samp,_ = ansatz.sample(10000) # get samples from the mode
+#E_samp,E2_samp = compute_energy(povm.hl_ob,povm.hlx_ob,Nqubit,samp)
+#print('Beginning energy:', E_samp, E2_samp)
 print('Exact beginning energy:', np.trace(povm.ham @ pho_povm))
 
 
@@ -117,17 +117,16 @@ for t in range(T):
     prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
     #plt.figure(3)
     #plt.bar(np.arange(4**Nqubit),prob_t)
-    cFid_t = np.dot(np.sqrt(prob_t), np.sqrt(prob_povm))
-    Fid_t = ncon((pho_t,pho_povm),([1,2],[2,1]))
-    print('Beginning training fidelity at time '+ str(t), cFid_t, Fid_t)
 
+    print('prob diff at time '+str(t), np.linalg.norm(prob_t-prob_povm,ord=1))
     samples_lP_co = reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, ansatz)
 
     #sa = samples_lP_co[0]
     #lp = samples_lP_co[1]
     #up_pi = samples_lP_co[2]
-    #up_pi2 = tf.exp(lp)-tau * up_pi
-    #freq = (tf.ones([sa.shape[0],]) - tau*up_pi / tf.exp(lp)) / tf.cast(sa.shape[0],tf.float32)
+    #up_pi2 = up_pi * tf.exp(lp)
+    ##freq = (tf.ones([sa.shape[0],]) - up_pi / tf.exp(lp)) / tf.cast(sa.shape[0],tf.float32)
+    #freq = up_pi / tf.cast(sa.shape[0],tf.float32)
     #config = tf.map_fn(lambda x: index(x), sa)
     #plt.figure(4)
     #plt.hist(config, bins=4**Nqubit, density=True)
@@ -143,9 +142,8 @@ for t in range(T):
     #plt.figure(6)
     #plt.bar(np.arange(len(u)),hist)
 
-
-
-    ept = tf.random.shuffle(np.concatenate(samples_lP_co,axis=1))
+    #ept = tf.random.shuffle(np.concatenate(samples_lP_co,axis=1))
+    ept = tf.constant(np.concatenate(samples_lP_co,axis=1))
     nsteps = int(samples_lP_co[0].shape[0] / batch_size) ## samples.shape[0]=Ndataset + batchsize
     bcount = 0
     counter=0
@@ -155,8 +153,8 @@ for t in range(T):
             print("time step", t, "epoch", epoch,"out of ", EPOCHS, 'nsteps', idx)
             if bcount*batch_size + batch_size>=Ndataset:
                 bcount=0
-                #ept = tf.random.shuffle(np.concatenate((samples,lP, co_Pj_sum),axis=1))
-                ept = tf.random.shuffle(np.concatenate((samples_lP_co),axis=1))
+                #ept = tf.random.shuffle(np.concatenate((samples_lP_co),axis=1))
+                ept = tf.constant(np.concatenate((samples_lP_co),axis=1))
             batch = ept[ bcount*batch_size: bcount*batch_size+batch_size,:]
             bcount=bcount+1
 

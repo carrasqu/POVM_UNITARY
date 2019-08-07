@@ -209,7 +209,8 @@ def loss_function3(batch,ansatz):
     batch_prob = tf.squeeze(tf.stop_gradient(tf.exp(batch[:, -2])))
     batch_ones = tf.ones([batch_size,],dtype=tf.float32)
 
-    loss = -tf.reduce_sum( (batch_ones-update_Pi/batch_prob) * batch_lP) / tf.cast(batch_size,tf.float32)
+    #loss = -tf.reduce_sum( (batch_ones-update_Pi/batch_prob) * batch_lP) / tf.cast(batch_size,tf.float32)
+    loss = -tf.reduce_sum( update_Pi * batch_lP) / tf.cast(batch_size,tf.float32)
     return loss
 
 
@@ -290,7 +291,6 @@ def reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, hl, hlx
         co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
         update_Pi += co_Pj_sum
 
-    #update_Pi = Prob - tau * update_Pi
     update_Pi = np.reshape(update_Pi,[-1,1])
 
 
@@ -315,11 +315,11 @@ def reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, hl, hlx
             coef_pj_sum = tf.reduce_sum(coef_pj, axis=1)
             up_pi += coef_pj_sum
 
-        #up_pi = pb - tau * up_pi
         up_pi = np.reshape(up_pi,[-1,1])
         update_Pi = np.vstack((update_Pi, up_pi))
 
-    update_Pi = tau * update_Pi
+    #update_Pi = tau * update_Pi
+    update_Pi = (tf.exp(lP) - tau * update_Pi) / tf.exp(lP)
     samples = tf.stop_gradient(samples)
     update_Pi = tf.stop_gradient(update_Pi)
     lP = tf.stop_gradient(lP)

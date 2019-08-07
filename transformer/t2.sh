@@ -6,9 +6,9 @@ NOW=$(date +"%m-%d-%Y")
 num=1
 N=4     # number of qubit
 T=1     # number of time step
-EPOCH=3    # number of epoch
+EPOCH=1    # number of epoch
 BATCH=1000 # batch size
-DATA=3000  # total data each epoch
+DATA=10000  # total data each epoch
 LOAD=0  # default to be 0
 
 
