@@ -24,10 +24,10 @@ if not os.path.exists("data"):
     os.makedirs("data")
 
 ### Parameters setting
-num_layers = 2 #4
-d_model = 128 #128
-dff = 128 # 512
-num_heads = 2 # 8
+num_layers = 2 #4  #1
+d_model = 128 #128 #16
+dff = 128 # 512     #16
+num_heads = 2 # 8 #1
 
 target_vocab_size = 4 # number of measurement outcomes
 input_vocab_size = target_vocab_size
