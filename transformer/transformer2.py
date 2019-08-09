@@ -387,7 +387,6 @@ def logP(config,ansatz, training=False):
 
   return logP #, attention_weights
 
-
 def flip2_tf(S,O,K,site,mask=False):
   ## S: batch, O: gate, K: number of measurement outcomes, sites: [j,j+1]
   ## S is not one-hot form
@@ -509,5 +508,44 @@ def vectorize(num_sites, K, ansatz):
     l_basis = tf.cast(l_basis, dtype=tf.uint8)
     lnP = logP(l_basis, ansatz, training=False)
     return lnP
+
+
+def flip2_reverse_swift(S,O,K,site):
+  ## S: batch, O: gate, K: number of measurement outcomes, sites: [j,j+1]
+  ## S is not one-hot form
+    Ns = tf.shape(S)[0] ## batch size
+    N  = tf.shape(S)[1] ## Nqubit
+    flipped = tf.cast(tf.reshape(tf.keras.backend.repeat(S, K**2),(Ns*K**2,N)),tf.float32) ## repeat is to prepare K**2 outcome after O adds on, after reshape it has shape (batchsize * 16, Nqubit
+    a = tf.constant(np.array(list(it.product(range(K), repeat = 2)),dtype=np.float32)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
+    s0 = flipped[:,site[0]]
+    s1 = flipped[:,site[1]]
+    a0 = tf.reshape(tf.tile(a[:,0],[Ns]),[-1]) ## tf.tile repeasts tensor Ns times
+    a1 = tf.reshape(tf.tile(a[:,1],[Ns]),[-1])
+    ## flipped has shape (batch, Nqubit), this function is to replace flipped[batch, site0], flipped[batch, site1] with a0, a1 values
+    flipped = slicetf.replace_slice_in(flipped)[:,site[0]].with_value(tf.reshape( a0 ,[K**2*Ns,1]))
+    flipped = slicetf.replace_slice_in(flipped)[:,site[1]].with_value(tf.reshape( a1 ,[K**2*Ns,1]))
+    a = tf.tile(a,[Ns,1])
+    indices_ = tf.cast(tf.concat([tf.reshape(s0,[tf.shape(s0)[0],1]),tf.reshape(s1,[tf.shape(s1)[0],1]),a],1),tf.int32)
+    ##getting the coefficients of the p-gates that accompany the flipped samples ## (Nq,Nq,Nq,Nq) shape for index
+    Coef = tf.gather_nd(O,indices_) ## O has to be tensor form
+    return flipped,Coef #,indices
+
+
+def flip1_reverse_swift(S,O,K,site):
+  ## S: batch, O: gate, K: number of measurement outcomes, sites: [j,j+1]
+  ## S is not one-hot form
+    Ns = tf.shape(S)[0] ## batch size
+    N  = tf.shape(S)[1] ## Nqubit
+    flipped = tf.cast(tf.reshape(tf.keras.backend.repeat(S, K),(Ns*K,N)),tf.float32) ## repeat is to prepare K**2 outcome after O adds on, after reshape it has shape (batchsize * 16, Nqubit)
+    a = tf.constant(np.array(list(it.product(range(K), repeat = 1)),dtype=np.float32)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
+    s0 = flipped[:,site[0]]
+    a0 = tf.reshape(tf.tile(a[:,0],[Ns]),[-1]) ## tf.tile repeasts tensor Ns times
+    ## flipped has shape (batch, Nqubit), this function is to replace flipped[batch, site0], flipped[batch, site1] with a0, a1 values
+    flipped = slicetf.replace_slice_in(flipped)[:,site[0]].with_value(tf.reshape( a0 ,[K*Ns,1]))
+    a = tf.tile(a,[Ns,1])
+    indices_ = tf.cast(tf.concat([tf.reshape(s0,[tf.shape(s0)[0],1]),a],1),tf.int32)
+    ##getting the coefficients of the p-gates that accompany the flipped samples ## (Nq,Nq,Nq,Nq) shape for index
+    Coef = tf.gather_nd(O,indices_) ## O has to be tensor form
+    return flipped,Coef #,indices
 
 

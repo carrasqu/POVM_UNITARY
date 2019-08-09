@@ -21,6 +21,6 @@ cd results/$name
 
 #python -i training.py $N $T $EPOCH $BATCH $DATA $LOAD |& tee output
 #python -i training.py $N $T $EPOCH $BATCH $DATA $LOAD
-#python -i training2.py $N $T $EPOCH $BATCH $DATA $LOAD
+python -i training2.py $N $T $EPOCH $BATCH $DATA $LOAD
 #python -i training3.py $N $T $EPOCH $BATCH $DATA $LOAD
-python -i dynamics.py $N $T $EPOCH $BATCH $DATA $LOAD
+#python -i dynamics.py $N $T $EPOCH $BATCH $DATA $LOAD

@@ -23,9 +23,9 @@ if not os.path.exists("data"):
 
 ### Parameters setting
 num_layers = 2 #4
-d_model = 128 #128
-dff = 128 # 512
-num_heads = 4 # 8
+d_model = 16 #128
+dff = 16 # 512
+num_heads = 2 # 8
 
 target_vocab_size = 4 # number of measurement outcomes
 input_vocab_size = target_vocab_size
@@ -46,6 +46,7 @@ mps = MPS(POVM=povm_,Number_qubits=MAX_LENGTH,MPS="Graph")
 bias = povm.getinitialbias("+")
 
 # define target state
+povm.construct_Nframes()
 povm.construct_psi()
 povm.construct_ham()
 psi, E = povm.ham_eigh()
@@ -125,7 +126,8 @@ for t in range(T):
           Ncalls = Ndataset /batch_size
           samples,lP = sample(ansatz, batch_size) # get samples from the model
           lP = np.reshape(lP,[-1,1]) ## not necessary
-          flip,co = flip2_reverse_tf(samples,gate,target_vocab_size,sites)
+          #flip,co = flip2_reverse_tf(samples,gate,target_vocab_size,sites)
+          flip,co = flip2_reverse_swift(samples,gate,target_vocab_size,sites)
           flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
           Pj = tf.exp(logP(flip,ansatz))
           co_Pj = tf.reshape(co*Pj,(batch_size, gate_factor))
@@ -137,7 +139,8 @@ for t in range(T):
               samples = np.vstack((samples,sa))
               llpp =np.reshape(llpp,[-1,1])
               lP =  np.vstack((lP,llpp))
-              fp,coef = flip2_reverse_tf(sa,gate,target_vocab_size,sites)
+              #fp,coef = flip2_reverse_tf(sa,gate,target_vocab_size,sites)
+              fp,coef = flip2_reverse_swift(sa,gate,target_vocab_size,sites)
               fp = tf.cast(fp, dtype=tf.uint8) # c are configurations
               pj = tf.exp(logP(fp,ansatz))
               coef_pj = tf.reshape(coef*pj,(batch_size, gate_factor))
@@ -149,7 +152,6 @@ for t in range(T):
 
       nsteps = int(samples.shape[0] / batch_size) ## samples.shape[0]=Ndataset + batchsize
       bcount = 0
-      counter=0
 
       samples = tf.stop_gradient(samples)
       co_Pj_sum = tf.stop_gradient(co_Pj_sum)

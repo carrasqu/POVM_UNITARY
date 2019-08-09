@@ -24,10 +24,10 @@ if not os.path.exists("data"):
     os.makedirs("data")
 
 ### Parameters setting
-num_layers = 2 #4  #1
-d_model = 128 #128 #16
-dff = 128 # 512     #16
-num_heads = 2 # 8 #1
+num_layers = 1 #4  #1
+d_model = 16 #128 #16
+dff = 16 # 512     #16
+num_heads = 1 # 8 #1
 
 target_vocab_size = 4 # number of measurement outcomes
 input_vocab_size = target_vocab_size
@@ -142,19 +142,18 @@ for t in range(T):
     #plt.figure(6)
     #plt.bar(np.arange(len(u)),hist)
 
-    #ept = tf.random.shuffle(np.concatenate(samples_lP_co,axis=1))
-    ept = tf.constant(np.concatenate(samples_lP_co,axis=1))
+    ept = tf.random.shuffle(np.concatenate(samples_lP_co,axis=1))
+    #ept = tf.constant(np.concatenate(samples_lP_co,axis=1))
     nsteps = int(samples_lP_co[0].shape[0] / batch_size) ## samples.shape[0]=Ndataset + batchsize
     bcount = 0
-    counter=0
 
     for epoch in range(EPOCHS):
         for idx in range(nsteps):
             print("time step", t, "epoch", epoch,"out of ", EPOCHS, 'nsteps', idx)
             if bcount*batch_size + batch_size>=Ndataset:
                 bcount=0
-                #ept = tf.random.shuffle(np.concatenate((samples_lP_co),axis=1))
-                ept = tf.constant(np.concatenate((samples_lP_co),axis=1))
+                ept = tf.random.shuffle(np.concatenate((samples_lP_co),axis=1))
+                #ept = tf.constant(np.concatenate((samples_lP_co),axis=1))
             batch = ept[ bcount*batch_size: bcount*batch_size+batch_size,:]
             bcount=bcount+1
 
