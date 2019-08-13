@@ -318,7 +318,6 @@ def reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, hl, hlx
     ## it ensures at least one batch size samples, since Ncall can be zero
     Ncalls = Ndataset /batch_size
     samples,lP = ansatz.sample(batch_size) # get samples from the model
-    tmp = samples * 1
 
     #samples = tf.constant(np.array(list(it.product(range(4), repeat = Nqubit)),dtype=np.uint8))
     #lP = ansatz(samples)
@@ -344,11 +343,11 @@ def reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, hl, hlx
         update_Pi += co_Pj_sum
 
     update_Pi = np.reshape(update_Pi,[-1,1])
+    #update_Pi = tau * update_Pi
+    update_Pi = (tf.exp(lP) - tau * update_Pi) / tf.exp(lP)
 
     for k in range(int(Ncalls)):
         sa,llpp = ansatz.sample(batch_size)
-        #sa = tmp
-        #llpp = ansatz(tmp)
         samples = np.vstack((samples,sa))
         llpp =np.reshape(llpp,[-1,1])
         lP =  np.vstack((lP,llpp))
@@ -371,15 +370,64 @@ def reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, hl, hlx
             up_pi += coef_pj_sum
 
         up_pi = np.reshape(up_pi,[-1,1])
+        #up_pi = tau * update_pi
+        up_pi = (tf.exp(llpp) - tau * up_pi) / tf.exp(llpp)
         update_Pi = np.vstack((update_Pi, up_pi))
 
     #update_Pi = tau * update_Pi
-    update_Pi = (tf.exp(lP) - tau * update_Pi) / tf.exp(lP)
+    #update_Pi = (tf.exp(lP) - tau * update_Pi) / tf.exp(lP)
     samples = tf.stop_gradient(samples)
     update_Pi = tf.stop_gradient(update_Pi)
     lP = tf.stop_gradient(lP)
 
     return (samples, lP, update_Pi)
+
+
+def reverse_samples_ham2(Ndataset, batch_size, Nqubit, target_vocab_size, hl, hlx, tau, ansatz):
+
+    epoch = int(Ndataset /batch_size)
+    sa = []
+    lp = []
+    up = []
+
+    for i in range(epoch):
+      samples,lP = ansatz.sample(batch_size) # get samples from the model
+      lP = np.reshape(lP,[-1,1]) ## necessary for concatenate
+      update_Pi = tf.zeros([batch_size,], tf.float32)
+
+      flip,co = flip2_reverse_tf(samples,hlx,target_vocab_size,site=[Nqubit-2, Nqubit-1])
+      #flip,co = flip2_reverse_swift(samples,hlx,target_vocab_size,site=[Nqubit-2, Nqubit-1])
+      flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
+      Pj = tf.exp(ansatz(flip))
+      co_Pj = tf.reshape(co*Pj,(batch_size, 16))
+      co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
+      update_Pi += co_Pj_sum
+      for i in range(Nqubit-2):
+          flip,co = flip2_reverse_tf(samples,hl,target_vocab_size,site=[i,i+1])
+          #flip,co = flip2_reverse_swift(samples,hl,target_vocab_size,site=[i,i+1])
+          flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
+          Pj = tf.exp(ansatz(flip))
+          co_Pj = tf.reshape(co*Pj,(batch_size, 16))
+          co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
+          update_Pi += co_Pj_sum
+
+      update_Pi = np.reshape(update_Pi,[-1,1])
+      update_Pi = (tf.exp(lP) - tau * update_Pi) / tf.exp(lP)
+      sa.append(samples)
+      lp.append(lP)
+      up.append(update_Pi)
+
+    sa = tf.reshape(sa, [-1,Nqubit])
+    lp = tf.reshape(lp, [-1,1])
+    up = tf.reshape(up, [-1,1])
+    #update_Pi = tau * update_Pi
+    #update_Pi = (tf.exp(lP) - tau * update_Pi) / tf.exp(lP)
+    sa = tf.stop_gradient(sa)
+    up = tf.stop_gradient(up)
+    lp = tf.stop_gradient(lp)
+
+    return (sa, lp, up)
+
 
 
 def forward_samples(Ndataset, batch_size, ansatz):

@@ -158,8 +158,8 @@ plt.bar(np.arange(4**Nqubit),prob_t)
 
 
 # generate samples
-batch_size =int(5e4)
-sample_size = int(1e1)
+batch_size =int(1e3)
+sample_size = int(1e4)
 log_prob_t = tf.math.log([prob_t+1e-13])
 
 
@@ -169,7 +169,7 @@ log_prob_t = tf.math.log([prob_t+1e-13])
 #plt.hist(np.reshape(cat,-1), bins=4**N, density=True)
 
 
-samples_lP_co = reverse_samples_ham(sample_size, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, ansatz)
+samples_lP_co = reverse_samples_ham2(sample_size, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, ansatz)
 
 sa = tf.cast(samples_lP_co[0], dtype=tf.float32)
 lp = samples_lP_co[1]
@@ -193,23 +193,25 @@ for i in range(len(u)):
     hist[i] = np.sum(freq.numpy()[id,0])
 plt.figure(7)
 plt.bar(np.arange(len(u)),hist)
-#sa = tf.reshape(sa,[-1,batch_size,int(N)])
-#lp = tf.reshape(lp,[-1,batch_size,1])
-#up_pi = tf.reshape(up_pi,[-1,batch_size,1])
 
-##ept = tf.random.shuffle(np.concatenate(samples_lP_co,axis=1))
-#ept = tf.constant(np.concatenate(samples_lP_co,axis=1))
 print('diff', np.linalg.norm(prob_t[u.astype(np.int)] - up_pi3/np.sum(up_pi3)))
 print('raw_diff', np.linalg.norm(prob_t_raw[u.astype(np.int)] - up_pi3))
-assert False, 'stop'
+
+#assert False, 'stop'
 
 
 # training
+sa = tf.reshape(sa,[-1,batch_size,int(N)])
+lp = tf.reshape(lp,[-1,batch_size,1])
+up_pi = tf.reshape(up_pi,[-1,batch_size,1])
+##ept = tf.random.shuffle(np.concatenate(samples_lP_co,axis=1))
+#ept = tf.constant(np.concatenate(samples_lP_co,axis=1))
+
 optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
 
 print('initial prob diff:', np.linalg.norm(prob_t-prob_povm, ord=1))
 Fidelity=[]
-for i in range(100):
+for i in range(5):
     loss_tr = train_step(loss_fn, optimizer, samples=sa, samples_p=up_pi, ansatz=ansatz)
     #loss_tr = train_step(loss_fn, optimizer, samples, samples_p, ansatz=ansatz)
     print('epoch complete loss:', loss_tr, 'epoch:', i)

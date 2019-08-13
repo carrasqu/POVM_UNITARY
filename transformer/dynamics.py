@@ -43,7 +43,7 @@ j_init = 0
 
 povm_='Tetra_pos'
 initial_state='0'
-tau = 0.1/float(T)
+tau = 10/float(T)
 povm = POVM(POVM=povm_, Number_qubits=Nqubit, initial_state=initial_state,Jz=1.0,hx=1.0,eps=tau)
 mps = MPS(POVM=povm_,Number_qubits=Nqubit,MPS="GHZ")
 bias = povm.getinitialbias(initial_state)
@@ -101,7 +101,7 @@ print('Exact beginning energy:', np.trace(povm.ham @ pho_povm))
 
 
 # define training setting
-learning_rate = CustomSchedule(d_model)
+#learning_rate = CustomSchedule(d_model)
 #optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
 optimizer = tf.keras.optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.98, epsilon=1e-9) ## lr=1e-4
 
@@ -119,7 +119,8 @@ for t in range(T):
     #plt.bar(np.arange(4**Nqubit),prob_t)
 
     print('prob diff at time '+str(t), np.linalg.norm(prob_t-prob_povm,ord=1))
-    samples_lP_co = reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, ansatz)
+    samples_lP_co = reverse_samples_ham2(Ndataset, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, ansatz)
+
 
     #sa = samples_lP_co[0]
     #lp = samples_lP_co[1]
