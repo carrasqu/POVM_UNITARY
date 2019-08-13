@@ -274,9 +274,11 @@ def reverse_samples(Ndataset, batch_size, gate, target_vocab_size, sites, ansatz
     samples,lP = ansatz.sample(batch_size) # get samples from the model
     lP = np.reshape(lP,[-1,1]) ## necessary for concatenate
     if gate_factor == 16:
-        flip,co = flip2_reverse_tf(samples,gate,target_vocab_size,sites)
+        #flip,co = flip2_reverse_tf(samples,gate,target_vocab_size,sites)
+        flip,co = flip2_reverse_swift(samples,gate,target_vocab_size,sites)
     else:
-        flip,co = flip1_reverse_tf(samples,gate,target_vocab_size,sites)
+        #flip,co = flip1_reverse_tf(samples,gate,target_vocab_size,sites)
+        flip,co = flip1_reverse_swift(samples,gate,target_vocab_size,sites)
 
     flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
     Pj = tf.exp(ansatz(flip))
@@ -290,9 +292,11 @@ def reverse_samples(Ndataset, batch_size, gate, target_vocab_size, sites, ansatz
         llpp =np.reshape(llpp,[-1,1])
         lP =  np.vstack((lP,llpp))
         if gate_factor == 16:
-            fp,coef = flip2_reverse_tf(sa,gate,target_vocab_size,sites)
+            #fp,coef = flip2_reverse_tf(sa,gate,target_vocab_size,sites)
+            fp,coef = flip2_reverse_swift(sa,gate,target_vocab_size,sites)
         else:
-            fp,coef = flip1_reverse_tf(sa,gate,target_vocab_size,sites)
+            #fp,coef = flip1_reverse_tf(sa,gate,target_vocab_size,sites)
+            fp,coef = flip1_reverse_swift(sa,gate,target_vocab_size,sites)
         fp = tf.cast(fp, dtype=tf.uint8) # c are configurations
         pj = tf.exp(ansatz(fp))
         coef_pj = tf.reshape(coef*pj,(batch_size, gate_factor))
@@ -314,10 +318,17 @@ def reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, hl, hlx
     ## it ensures at least one batch size samples, since Ncall can be zero
     Ncalls = Ndataset /batch_size
     samples,lP = ansatz.sample(batch_size) # get samples from the model
+    tmp = samples * 1
+
+    #samples = tf.constant(np.array(list(it.product(range(4), repeat = Nqubit)),dtype=np.uint8))
+    #lP = ansatz(samples)
+
     lP = np.reshape(lP,[-1,1]) ## necessary for concatenate
     update_Pi = tf.zeros([batch_size,], tf.float32)
 
+
     flip,co = flip2_reverse_tf(samples,hlx,target_vocab_size,site=[Nqubit-2, Nqubit-1])
+    #flip,co = flip2_reverse_swift(samples,hlx,target_vocab_size,site=[Nqubit-2, Nqubit-1])
     flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
     Pj = tf.exp(ansatz(flip))
     co_Pj = tf.reshape(co*Pj,(batch_size, 16))
@@ -325,6 +336,7 @@ def reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, hl, hlx
     update_Pi += co_Pj_sum
     for i in range(Nqubit-2):
         flip,co = flip2_reverse_tf(samples,hl,target_vocab_size,site=[i,i+1])
+        #flip,co = flip2_reverse_swift(samples,hl,target_vocab_size,site=[i,i+1])
         flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
         Pj = tf.exp(ansatz(flip))
         co_Pj = tf.reshape(co*Pj,(batch_size, 16))
@@ -333,15 +345,17 @@ def reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, hl, hlx
 
     update_Pi = np.reshape(update_Pi,[-1,1])
 
-
     for k in range(int(Ncalls)):
         sa,llpp = ansatz.sample(batch_size)
+        #sa = tmp
+        #llpp = ansatz(tmp)
         samples = np.vstack((samples,sa))
         llpp =np.reshape(llpp,[-1,1])
         lP =  np.vstack((lP,llpp))
         up_pi = tf.zeros([batch_size,], tf.float32)
 
         fp,coef = flip2_reverse_tf(sa,hlx,target_vocab_size,site=[Nqubit-2,Nqubit-1])
+        #fp,coef = flip2_reverse_swift(sa,hlx,target_vocab_size,site=[Nqubit-2,Nqubit-1])
         fp = tf.cast(fp, dtype=tf.uint8) # c are configurations
         pj = tf.exp(ansatz(fp))
         coef_pj = tf.reshape(coef*pj,(batch_size, 16))
@@ -349,6 +363,7 @@ def reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, hl, hlx
         up_pi += coef_pj_sum
         for i in range(Nqubit-2):
             fp,co = flip2_reverse_tf(sa,hl,target_vocab_size,site=[i,i+1])
+            #fp,co = flip2_reverse_swift(sa,hl,target_vocab_size,site=[i,i+1])
             fp = tf.cast(fp, dtype=tf.uint8) # c are configurations
             pj = tf.exp(ansatz(fp))
             coef_pj = tf.reshape(coef*pj,(batch_size, 16))

@@ -13,6 +13,7 @@ import os
 import time
 import timeit
 from transformer3 import *
+from utils import *
 
 
 if not os.path.exists("samples"):
@@ -47,21 +48,21 @@ mps = MPS(POVM=povm_,Number_qubits=MAX_LENGTH,MPS="GHZ")
 bias = povm.getinitialbias(initial_state)
 
 # define target state
-#povm.construct_psi()
-#povm.construct_Nframes()
-#povm.construct_ham()
-#psi, E = povm.ham_eigh()
-## GHZ state
-#psi = np.zeros(2**MAX_LENGTH)
-#psi[0] = 1.
-#psi[-1] = 1.
-#psi = psi/ np.sqrt(2)
-#psi_t = povm.psi
-#psi_t = psi_t / np.linalg.norm(psi_t)
-#pho = np.outer(psi, np.conjugate(psi))
-#pho_t = np.outer(psi_t, np.conjugate(psi_t))
-#prob = ncon((pho,povm.Mn),([1,2],[-1,2,1])).real
-#prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
+povm.construct_psi()
+povm.construct_Nframes()
+povm.construct_ham()
+psi, E = povm.ham_eigh()
+# GHZ state
+psi = np.zeros(2**MAX_LENGTH)
+psi[0] = 1.
+psi[-1] = 1.
+psi = psi/ np.sqrt(2)
+psi_t = povm.psi
+psi_t = psi_t / np.linalg.norm(psi_t)
+pho = np.outer(psi, np.conjugate(psi))
+pho_t = np.outer(psi_t, np.conjugate(psi_t))
+prob = ncon((pho,povm.Mn),([1,2],[-1,2,1])).real
+prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
 
 
 # define ansatz
@@ -80,7 +81,6 @@ E_mpo,E2_mpo = compute_energy_mpo(povm.Hp, samp)
 #print('correct E', Et)
 print('samples E', E_samp, E2_samp)
 print('mpo E', E_mpo, E2_mpo)
-assert False, 'stop'
 
 
 

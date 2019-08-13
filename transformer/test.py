@@ -6,8 +6,12 @@ import itertools as it
 import tensorflow as tf
 
 
-N = int(2)
-a = POVM(POVM='Tetra_pos',Number_qubits=N, eps=1e-1)
+N = int(4)
+tau = 0.1
+povm_='Tetra_pos'
+initial_state='0'
+#a = POVM(POVM='Tetra_pos',Number_qubits=N, eps=1e-1)
+a = POVM(POVM=povm_, Number_qubits=N, initial_state=initial_state,Jz=1.0,hx=1.0,eps=tau)
 b = POVM(POVM='Tetra',Number_qubits=N, eps=1e2)
 c = POVM(POVM='4Pauli',Number_qubits=N, eps=1e2)
 a.construct_ham()
@@ -40,31 +44,45 @@ a.construct_Nframes()
 
 # construct 4 qubit wave function and reshape its tensor form
 np.random.seed(30)
-psi = np.random.rand(2**N)*2 - 1 + 1j*(np.random.rand(2**N)*2 - 1)
-psi = psi / np.linalg.norm(psi)
+#psi = np.random.rand(2**N)*2 - 1 + 1j*(np.random.rand(2**N)*2 - 1)
+#psi = psi / np.linalg.norm(psi)
+psi = a.psi.copy()
 pho = np.outer(psi, np.conjugate(psi))
 w, v = np.linalg.eigh(pho)
 print(np.trace(pho))
 print(np.trace(pho @ pho))
 print(np.linalg.norm(pho-np.conjugate(pho.transpose())))
 print(w)
-pho1 = pho.copy()
-size = np.ones(2*N, dtype=int) * 2
-pho1 = np.reshape(pho1, size)
+#pho1 = pho.copy()
+#size = np.ones(2*N, dtype=int) * 2
+#pho1 = np.reshape(pho1, size)
 
 # check commuting gate and non-commuting gate
-tau = 0.1
 pho_t0 = np.outer(psi, np.conjugate(psi))
 prob_t0 = ncon((pho_t0,a.Mn),([1,2],[-1,2,1])).real
-pho_t = pho_t0.copy()
 pho_t = pho_t0 - tau *( a.ham @ pho_t0 + pho_t0 @ a.ham)
 pho_t1 = pho_t0 - 1j*tau *( a.ham @ pho_t0 - pho_t0 @ a.ham)
 prob_t = ncon((pho_t,a.Mn),([1,2],[-1,2,1])).real
+prob_t_normalize = prob_t / np.sum(prob_t)
 prob_t1 = ncon((pho_t1,a.Mn),([1,2],[-1,2,1])).real
-hlx_com = a.hlx_com.reshape(16,16)
-hlx_anti = a.hlx_anti.reshape(16,16)
-prob_t2 = prob_t0 - tau*hlx_com @ prob_t0
-prob_t3 = prob_t0 + tau*hlx_anti @ prob_t0
+ham_com = a.kron_P_gate(a.hlx_com,N-2,N)
+ham_anti = a.kron_P_gate(a.hlx_anti,N-2,N)
+for i in range(N-2):
+  ham_com += a.kron_P_gate(a.hl_com,i,N)
+  ham_anti += a.kron_P_gate(a.hl_anti,i,N)
+prob_t2 = prob_t0 - tau*ham_com @ prob_t0
+prob_t3 = prob_t0 + tau*ham_anti @ prob_t0
+print('diff', np.linalg.norm(prob_t-prob_t2))
+print('pi-pf', np.linalg.norm(prob_t0-prob_t2/np.sum(prob_t2)))
+
+plt.figure()
+plt.bar(np.arange(4**N),prob_t0)
+plt.figure()
+plt.bar(np.arange(4**N),prob_t_normalize)
+plt.figure()
+plt.bar(np.arange(4**N),prob_t)
+plt.figure()
+plt.bar(np.arange(4**N),prob_t2/np.sum(prob_t2))
 
 assert False, 'stop'
 

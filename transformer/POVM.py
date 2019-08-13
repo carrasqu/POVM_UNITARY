@@ -327,6 +327,33 @@ class POVM():
       g = np.kron(g, I_R)
       return g
 
+
+    def kron_P_gate(self, gate, site, Nqubit):
+
+      gate_factor = int(gate.ndim /2)
+      g = gate.copy()
+      if gate_factor == 2:
+        g = np.reshape(g, (16,16))
+
+      if site != 0:
+        I_L = np.eye(4)
+        for i in range(site-1):
+          I_L = np.kron(I_L, np.eye(4))
+      else:
+        I_L = 1.
+
+      if site != Nqubit - gate_factor:
+        I_R = np.eye(4)
+        for i in range(Nqubit-site-gate_factor-1):
+          I_R = np.kron(I_R, np.eye(4))
+      else:
+        I_R = 1.
+
+      g = np.kron(I_L, g)
+      g = np.kron(g, I_R)
+      return g
+
+
     def construct_Nframes(self):
       # Nqubit tensor product of frame Mn and dual frame Ntn
       self.Ntn = self.Nt.copy()

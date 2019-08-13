@@ -139,11 +139,29 @@ plt.figure(3)
 plt.bar(np.arange(4**Nqubit),prob_t)
 
 
+#samples_lP_co = reverse_samples_ham(256, 256, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, ansatz)
+#sa = tf.cast(samples_lP_co[0], dtype=tf.float32)
+#lp = samples_lP_co[1]
+#up_pi = samples_lP_co[2]
+#update_Pi = up_pi * tf.exp(lp)
+#
+#config = tf.map_fn(lambda x: index(x), sa)
+#u, ind = np.unique(config, return_index=True)
+#update_Pi = update_Pi.numpy()[ind,0].reshape(-1)
+#
+#
+#plt.figure()
+#plt.bar(np.arange(4**Nqubit),update_Pi)
+##plt.bar(np.arange(4**Nqubit),update_Pi[:,0].numpy())
+
+
+
 
 # generate samples
-batch_size =int(1e4)
-sample_size = int(9e4)
+batch_size =int(5e4)
+sample_size = int(1e1)
 log_prob_t = tf.math.log([prob_t+1e-13])
+
 
 #cat, samples, samples_p = generate_samples(log_prob_t, batch_size, size=sample_size, Nqubit=N, base=4)
 
@@ -163,23 +181,27 @@ config = tf.map_fn(lambda x: index(x), sa)
 #plt.figure(5)
 #plt.hist(config, bins=4**Nqubit, density=True)
 u, ind = np.unique(config, return_index=True)
-up_pi2 = up_pi2.numpy()[ind].reshape(-1)
+up_pi3 = up_pi2.numpy()[ind,0]
 plt.figure(6)
-plt.bar(np.arange(len(u)),up_pi2)
+plt.bar(np.arange(len(u)),up_pi3)
 
 hist = np.zeros(len(u))
+count = 0.
 for i in range(len(u)):
     id = np.where(config.numpy() == u[i])
-    hist[i] = np.sum(freq.numpy()[id])
+    count += id[0].shape[0]
+    hist[i] = np.sum(freq.numpy()[id,0])
 plt.figure(7)
 plt.bar(np.arange(len(u)),hist)
-sa = tf.reshape(sa,[-1,batch_size,int(N)])
-lp = tf.reshape(lp,[-1,batch_size,1])
-up_pi = tf.reshape(up_pi,[-1,batch_size,1])
+#sa = tf.reshape(sa,[-1,batch_size,int(N)])
+#lp = tf.reshape(lp,[-1,batch_size,1])
+#up_pi = tf.reshape(up_pi,[-1,batch_size,1])
 
 ##ept = tf.random.shuffle(np.concatenate(samples_lP_co,axis=1))
 #ept = tf.constant(np.concatenate(samples_lP_co,axis=1))
-
+print('diff', np.linalg.norm(prob_t[u.astype(np.int)] - up_pi3/np.sum(up_pi3)))
+print('raw_diff', np.linalg.norm(prob_t_raw[u.astype(np.int)] - up_pi3))
+assert False, 'stop'
 
 
 # training
