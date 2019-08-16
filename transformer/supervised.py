@@ -169,7 +169,7 @@ log_prob_t = tf.math.log([prob_t+1e-13])
 #plt.hist(np.reshape(cat,-1), bins=4**N, density=True)
 
 
-samples_lP_co = reverse_samples_ham2(sample_size, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, ansatz)
+samples_lP_co = reverse_samples_ham(sample_size, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, ansatz)
 
 sa = tf.cast(samples_lP_co[0], dtype=tf.float32)
 lp = samples_lP_co[1]
@@ -197,7 +197,7 @@ plt.bar(np.arange(len(u)),hist)
 print('diff', np.linalg.norm(prob_t[u.astype(np.int)] - up_pi3/np.sum(up_pi3)))
 print('raw_diff', np.linalg.norm(prob_t_raw[u.astype(np.int)] - up_pi3))
 
-#assert False, 'stop'
+assert False, 'stop'
 
 
 # training

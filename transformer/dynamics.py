@@ -57,7 +57,7 @@ if LOAD==1:
 
 # define target state
 povm.construct_psi()
-povm.construct_Nframes()
+#povm.construct_Nframes()
 povm.construct_ham()
 psi, E = povm.ham_eigh()
 ## GHZ state
