@@ -160,7 +160,7 @@ for t in range(T):
     pho_t = np.outer(psi_t, np.conjugate(psi_t))
     prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
 
-    samples_lP_co = reverse_samples(Ndataset, batch_size, gate, target_vocab_size, sites, ansatz)
+    samples_lP_co = reverse_samples(Ndataset, batch_size, MAX_LENGTH, gate, target_vocab_size, sites, ansatz)
     #samples_lP_co = forward_samples(Ndataset, batch_size, ansatz)
     ept = tf.random.shuffle(np.concatenate(samples_lP_co,axis=1))
 

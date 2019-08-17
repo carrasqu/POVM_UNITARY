@@ -3,6 +3,7 @@ from POVM import *
 from matplotlib import pyplot as plt
 from transformer3 import *
 from utils import *
+from backup import *
 import itertools as it
 import tensorflow as tf
 
@@ -130,11 +131,28 @@ plt.bar(np.arange(4**Nqubit),prob_t)
 #plt.figure(2)
 #plt.bar(np.arange(4**Nqubit),prob_povm)
 
+# gate based
+SITE = [[0]]
+GATE = [povm.H]
+P_GATE = [povm.P_gate(povm.H)]
+#SITE = [[0,1]]
+#GATE = [povm.cnot]
+#P_GATE = [povm.P_gate(povm.cnot)]
+for i in range(len(SITE)):
+  sites=SITE[i]
+  gate = P_GATE[i]
+  gtype = int(gate.ndim/2)
+  kron_gate = povm.kron_gate(GATE[i], sites[0], Nqubit)
+  psi_t = psi_t @ kron_gate
+  psi_t = psi_t / np.linalg.norm(psi_t)
+  pho_t = np.outer(psi_t, np.conjugate(psi_t))
+  prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
 
-pho_t = pho_t - tau *( povm.ham @ pho_t + pho_t @ povm.ham)
-prob_t_raw = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real.astype(np.float32)
-pho_t = pho_t / np.trace(pho_t)
-prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real.astype(np.float32)
+# imaginary time
+#pho_t = pho_t - tau *( povm.ham @ pho_t + pho_t @ povm.ham)
+#prob_t_raw = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real.astype(np.float32)
+#pho_t = pho_t / np.trace(pho_t)
+#prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real.astype(np.float32)
 plt.figure(3)
 plt.bar(np.arange(4**Nqubit),prob_t)
 
@@ -169,14 +187,18 @@ log_prob_t = tf.math.log([prob_t+1e-13])
 #plt.hist(np.reshape(cat,-1), bins=4**N, density=True)
 
 
-samples_lP_co = reverse_samples_ham(sample_size, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, ansatz)
+#samples_lP_co = reverse_samples_ham(sample_size, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, ansatz)
+samples_lP_co = reverse_samples(sample_size, batch_size, Nqubit, gate, target_vocab_size, sites, ansatz)
+#samples_lP_co = reverse_samples2(sample_size, batch_size, gate, target_vocab_size, sites, ansatz)
+
 
 sa = tf.cast(samples_lP_co[0], dtype=tf.float32)
 lp = samples_lP_co[1]
 up_pi = samples_lP_co[2]
-up_pi2 = up_pi * tf.exp(lp)
+#up_pi2 = up_pi * tf.exp(lp)
+up_pi2 = up_pi * 1.
 #freq = (tf.ones([sa.shape[0],]) - up_pi / tf.exp(lp)) / tf.cast(sa.shape[0],tf.float32)
-freq = up_pi / tf.cast(sa.shape[0],tf.float32)
+freq = up_pi / tf.cast(sa.shape[0],tf.float32) /tf.exp(lp)
 config = tf.map_fn(lambda x: index(x), sa)
 #plt.figure(5)
 #plt.hist(config, bins=4**Nqubit, density=True)
@@ -195,7 +217,7 @@ plt.figure(7)
 plt.bar(np.arange(len(u)),hist)
 
 print('diff', np.linalg.norm(prob_t[u.astype(np.int)] - up_pi3/np.sum(up_pi3)))
-print('raw_diff', np.linalg.norm(prob_t_raw[u.astype(np.int)] - up_pi3))
+#print('raw_diff', np.linalg.norm(prob_t_raw[u.astype(np.int)] - up_pi3))
 
 assert False, 'stop'
 
