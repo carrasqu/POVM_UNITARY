@@ -24,6 +24,9 @@ if not os.path.exists("models"):
 if not os.path.exists("data"):
     os.makedirs("data")
 
+
+
+
 ### Parameters setting
 num_layers = 1 #4  #1
 d_model = 16 #128 #16
@@ -127,10 +130,10 @@ def batch_training_ham(num_batch, batch_size, Nqubit, target_vocab_size, hl, hlx
 
 
 @tf.function
-def batch_training_gate(num_batch, batch_size, Nqubit, target_vocab_size, gate, sites, gtype, optimizer, ansatz, ansatz_copy):
+def batch_training_gate(num_batch, batch_size, Nqubit, target_vocab_size, gate, sites, optimizer, ansatz, ansatz_copy):
 
   for _ in tf.range(num_batch):
-    samples_lP_co = reverse_samples_tf(batch_size, Nqubit, target_vocab_size, gate, sites, gtype, ansatz, ansatz_copy)
+    samples_lP_co = reverse_samples_tf(batch_size, Nqubit, target_vocab_size, gate, sites, ansatz, ansatz_copy)
     loss_fn = functools.partial(loss_function2,samples_lP_co,ansatz)
     optimizer.minimize(loss=loss_fn, var_list=ansatz.trainable_variables)
     #with tf.GradientTape() as tape:
@@ -138,7 +141,6 @@ def batch_training_gate(num_batch, batch_size, Nqubit, target_vocab_size, gate, 
 
     #gradients = tape.gradient(loss, ansatz.trainable_variables)
     #optimizer.apply_gradients(zip(gradients, ansatz.trainable_variables))
-
 
 
 
@@ -150,13 +152,16 @@ def batch_training_gate(num_batch, batch_size, Nqubit, target_vocab_size, gate, 
 #gtype = int(gate.ndim/2)
 #K = 4
 #S = ansatz.sample(2)[0]
-#fp,co = flip_reverse_tf(S,gate,K,sites,gtype)
+#fp,co = flip_reverse_tf(S,gate,K,sites)
 #optimizer = tf.keras.optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.98, epsilon=1e-9) ## lr=1e-4
 ##batch_training_ham(num_batch, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, optimizer, ansatz, ansatz_copy)
-#batch_training_gate(num_batch, batch_size, Nqubit, target_vocab_size, gate, sites, gtype, optimizer, ansatz, ansatz_copy)
+#batch_training_gate(num_batch, batch_size, Nqubit, target_vocab_size, gate, sites, optimizer, ansatz, ansatz_copy)
 #ansatz_copy.set_weights(ansatz.get_weights())
 #end = time.time()
 #print('time', start-end)
+
+
+
 
 optimizer = tf.keras.optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.98, epsilon=1e-9) ## lr=1e-4
 
@@ -187,7 +192,7 @@ for t in range(T):
     prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
 
     #optimizer = tf.keras.optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.98, epsilon=1e-9) ## lr=1e-4
-    batch_training_gate(num_batch, batch_size, Nqubit, target_vocab_size, gate, sites, gtype, optimizer, ansatz, ansatz_copy)
+    batch_training_gate(num_batch, batch_size, Nqubit, target_vocab_size, gate, sites, optimizer, ansatz, ansatz_copy)
     #batch_training_ham(num_batch, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, optimizer, ansatz, ansatz_copy)
     ansatz_copy.set_weights(ansatz.get_weights())
 
@@ -201,9 +206,9 @@ for t in range(T):
     ansatz.save_weights('./models/transformer2', save_format='tf')
 
 
-assert False, 'stop'
 Fidelity = np.array(Fidelity)
 np.savetxt('./data/Fidelity.txt',Fidelity)
+assert False, 'stop'
 
 
 ## final fidelity

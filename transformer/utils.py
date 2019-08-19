@@ -207,17 +207,27 @@ def flip1_reverse_tf(S,O,K,site):
     return flipped,Coef #,indices
 
 
-def flip_reverse_tf(S,O,K,site,gate_dim):
+def flip_reverse_tf(S,O,K,site):
   ## S: batch, O: gate, K: number of measurement outcomes, sites: [j,j+1]
   ## S is not one-hot form
   gate = tf.convert_to_tensor(O)
-  #gate_dim = tf.cast(tf.size(tf.shape(gate))/2, tf.int32)
+  gate_dim = tf.cast(tf.size(tf.shape(gate))/2, tf.int32)
   Ns = tf.shape(S)[0] ## batch size
   N  = tf.shape(S)[1] ## Nqubit
 
   flipped = tf.reshape(tf.keras.backend.repeat(S, K**gate_dim),(Ns*K**gate_dim,N)) ## repeat is to prepare K**2 outcome after O adds on, after reshape it has shape (batchsize * 16, Nqubit)
   s0 = tf.gather(flipped,site,axis=1)
-  a = tf.constant(np.array(list(it.product(range(K), repeat = gate_dim)),dtype=np.uint8)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
+
+  a1 = tf.constant([0,1,2,3], tf.uint8)
+  b = tf.constant([0,1,2,3], tf.uint8)
+  a1, b = a1[ None, :, None ], b[ :, None, None ]
+  c = tf.concat( [ a1 + tf.zeros_like( b ), tf.zeros_like( a1 ) + b ], axis = 2)
+
+  a = tf.cond(tf.equal(gate_dim, 2), lambda: c, lambda: a1)
+  a = tf.reshape(a, [-1,gate_dim])
+  a = tf.cast(a, tf.uint8)
+
+  #a = tf.constant(np.array(list(it.product(range(K), repeat = gate_dim)),dtype=np.uint8)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
   a = tf.tile(a,[Ns,1])
   indices_ = tf.cast(tf.concat([tf.reshape(s0,[tf.shape(s0)[0],-1]), a],1),tf.int32)
 
@@ -329,17 +339,17 @@ def reverse_samples(Ndataset, batch_size, Nqubit, gate, target_vocab_size, sites
     return (sa, lp, coef)
 
 
-def reverse_samples_tf(batch_size, Nqubit, target_vocab_size, gate, sites, gtype, ansatz, ansatz_copy):
+def reverse_samples_tf(batch_size, Nqubit, target_vocab_size, gate, sites, ansatz, ansatz_copy):
 
-  #gate_factor = tf.cast(tf.math.square(tf.size(tf.shape(gate))),tf.int32)
+  gate_factor = tf.cast(tf.math.square(tf.size(tf.shape(gate))),tf.int32)
   samples,lP = ansatz.sample(batch_size) # get samples from the model
   lP = tf.reshape(lP,[-1,1]) ## necessary for concatenate
-  flip,co = flip_reverse_tf(samples,gate,target_vocab_size,sites, gtype)
+  flip,co = flip_reverse_tf(samples,gate,target_vocab_size,sites)
   #flip,co = flip2_reverse_swift(samples,gate,target_vocab_size,sites)
 
   flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
   Pj = tf.exp(ansatz_copy(flip))
-  co_Pj = tf.reshape(co*Pj,[batch_size, 4**gtype])
+  co_Pj = tf.reshape(co*Pj,[batch_size, gate_factor])
   co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
   co_Pj_sum = tf.reshape(co_Pj_sum,[-1,1])
 
