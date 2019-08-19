@@ -84,7 +84,6 @@ plt.bar(np.arange(4**N),prob_t)
 plt.figure()
 plt.bar(np.arange(4**N),prob_t2/np.sum(prob_t2))
 
-assert False, 'stop'
 
 # convert POVM probability to density matrix in vector basis
 Nt2 = ncon((a.Nt,a.Nt),([-1,-3,-5],[-2,-4,-6]))
@@ -172,6 +171,7 @@ for i in range(4):
   print('dual frame works:', np.linalg.norm(p2[i]-a.p_two_qubit[i])<1e-14)
 
 
+assert False, 'stop'
 
 # sampling function
 psi_p = np.multiply(psi_g, np.conjugate(psi_g)).real

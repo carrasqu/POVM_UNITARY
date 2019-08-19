@@ -57,7 +57,7 @@ if LOAD==1:
 
 # define target state
 povm.construct_psi()
-#povm.construct_Nframes()
+povm.construct_Nframes()
 povm.construct_ham()
 psi, E = povm.ham_eigh()
 ## GHZ state
@@ -103,7 +103,6 @@ print('Exact beginning energy:', np.trace(povm.ham @ pho_povm))
 # define training setting
 #learning_rate = CustomSchedule(d_model)
 #optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
-optimizer = tf.keras.optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.98, epsilon=1e-9) ## lr=1e-4
 
 
 Fidelity=[]
@@ -119,7 +118,7 @@ for t in range(T):
     #plt.bar(np.arange(4**Nqubit),prob_t)
 
     print('prob diff at time '+str(t), np.linalg.norm(prob_t-prob_povm,ord=1))
-    samples_lP_co = reverse_samples_ham2(Ndataset, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, ansatz)
+    samples_lP_co = reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, ansatz)
 
 
     #sa = samples_lP_co[0]
@@ -148,6 +147,7 @@ for t in range(T):
     nsteps = int(samples_lP_co[0].shape[0] / batch_size) ## samples.shape[0]=Ndataset + batchsize
     bcount = 0
 
+    optimizer = tf.keras.optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.98, epsilon=1e-9) ## lr=1e-4
     for epoch in range(EPOCHS):
         for idx in range(nsteps):
             print("time step", t, "epoch", epoch,"out of ", EPOCHS, 'nsteps', idx)

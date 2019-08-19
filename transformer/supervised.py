@@ -84,7 +84,7 @@ input_vocab_size = target_vocab_size
 dropout_rate = 0.0
 
 povm_='Tetra_pos'
-initial_state='0'
+initial_state='+'
 T=1
 tau = 0.1/float(T)
 povm = POVM(POVM=povm_, Number_qubits=Nqubit, initial_state=initial_state,Jz=1.0,hx=1.0,eps=tau)

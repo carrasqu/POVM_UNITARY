@@ -350,6 +350,42 @@ def reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, hl, hlx
     return (sa, lp, up)
 
 
+def reverse_samples_ham_tf(batch_size, Nqubit, target_vocab_size, hl, hlx, tau, ansatz):
+
+  samples,lP = ansatz.sample(batch_size) # get samples from the model
+  lP = tf.reshape(lP,[-1,1]) ## necessary for concatenate
+  update_Pi = tf.zeros([batch_size,], tf.float32)
+
+  flip,co = flip2_reverse_tf(samples,hlx,target_vocab_size,site=[Nqubit-2, Nqubit-1])
+  #flip,co = flip2_reverse_swift(samples,hlx,target_vocab_size,site=[Nqubit-2, Nqubit-1])
+  flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
+  Pj = tf.exp(ansatz(flip))
+  co_Pj = tf.reshape(co*Pj,[batch_size, 16])
+  co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
+  update_Pi += co_Pj_sum
+  for i in range(Nqubit-2):
+    flip,co = flip2_reverse_tf(samples,hl,target_vocab_size,site=[i,i+1])
+    #flip,co = flip2_reverse_swift(samples,hl,target_vocab_size,site=[i,i+1])
+    flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
+    Pj = tf.exp(ansatz(flip))
+    co_Pj = tf.reshape(co*Pj,[batch_size, 16])
+    co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
+    update_Pi += co_Pj_sum
+
+  update_Pi = tf.reshape(update_Pi,[-1,1])
+  update_Pi = (tf.exp(lP) - tau * update_Pi) / tf.exp(lP)
+
+  #update_Pi = tau * update_Pi
+  #update_Pi = (tf.exp(lP) - tau * update_Pi) / tf.exp(lP)
+  samples = tf.cast(samples, tf.float32)
+  samples = tf.stop_gradient(samples)
+  lP = tf.stop_gradient(lP)
+  update_Pi = tf.stop_gradient(update_Pi)
+  samples_lP_co = tf.concat([samples, lP, update_Pi], 1)
+
+  #return (samples, lP, update_Pi)
+  return samples_lP_co
+
 
 def forward_samples(Ndataset, batch_size, ansatz):
     if Ndataset != 0:
