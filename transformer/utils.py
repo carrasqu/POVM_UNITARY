@@ -207,6 +207,33 @@ def flip1_reverse_tf(S,O,K,site):
     return flipped,Coef #,indices
 
 
+def flip_reverse_tf(S,O,K,site):
+  ## S: batch, O: gate, K: number of measurement outcomes, sites: [j,j+1]
+  ## S is not one-hot form
+  gate = tf.convert_to_tensor(O)
+  gate_dim = tf.cast(tf.size(tf.shape(gate))/2, tf.int32)
+  Ns = tf.shape(S)[0] ## batch size
+  N  = tf.shape(S)[1] ## Nqubit
+
+  flipped = tf.reshape(tf.keras.backend.repeat(S, K**gate_dim),(Ns*K**gate_dim,N)) ## repeat is to prepare K**2 outcome after O adds on, after reshape it has shape (batchsize * 16, Nqubit)
+  s0 = flipped[:,site[0]]
+  s1 = flipped[:,site[1]]
+  a = tf.constant(np.array(list(it.product(range(K), repeat = 2)),dtype=np.uint8)) # possible combinations of outcomes on 2 qubits ## it generates (0,0),(0,1),...,(3,3)
+  a = tf.tile(a,[Ns,1])
+  indices_ = tf.cast(tf.concat([tf.reshape(s0,[tf.shape(s0)[0],1]),tf.reshape(s1,[tf.shape(s1)[0],1]), a],1),tf.int32)
+
+  a = tf.transpose(a, perm=[1,0])
+  flipped = tf.transpose(flipped,perm=[1,0])
+  ind = tf.expand_dims(site,1)
+  flipped = tf.tensor_scatter_nd_update(flipped, ind, a)
+  flipped = tf.transpose(flipped,perm=[1,0])
+
+  ##getting the coefficients of the p-gates that accompany the flipped samples ## (Nq,Nq,Nq,Nq) shape for index
+  Coef = tf.gather_nd(O,indices_) ## O has to be tensor form
+
+  return flipped,Coef #,indices
+
+
 def loss_function(flip,co,gtype,batch_size,ansatz):
 
     target_vocab_size = ansatz.decoder.target_vocab_size
@@ -304,6 +331,29 @@ def reverse_samples(Ndataset, batch_size, Nqubit, gate, target_vocab_size, sites
     return (sa, lp, coef)
 
 
+def reverse_samples_tf(batch_size, Nqubit, target_vocab_size, gate, sites, ansatz, ansatz_copy):
+
+  gate_factor = tf.cast(tf.math.square(tf.size(tf.shape(gate))),tf.int32)
+  samples,lP = ansatz.sample(batch_size) # get samples from the model
+  lP = tf.reshape(lP,[-1,1]) ## necessary for concatenate
+  flip,co = flip_reverse_tf(samples,gate,target_vocab_size,sites)
+  #flip,co = flip2_reverse_swift(samples,gate,target_vocab_size,sites)
+
+  flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
+  Pj = tf.exp(ansatz_copy(flip))
+  co_Pj = tf.reshape(co*Pj,[batch_size, gate_factor])
+  co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
+  co_Pj_sum = tf.reshape(co_Pj_sum,[-1,1])
+
+  samples = tf.cast(samples, tf.float32)
+  samples = tf.stop_gradient(samples)
+  lP = tf.stop_gradient(lP)
+  coef = tf.stop_gradient(co_Pj_sum)
+  samples_lP_co = tf.concat([samples, lP, coef], 1)
+
+  return samples_lP_co
+
+
 def reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, hl, hlx, tau, ansatz):
 
     epoch = int(Ndataset /batch_size)
@@ -350,7 +400,7 @@ def reverse_samples_ham(Ndataset, batch_size, Nqubit, target_vocab_size, hl, hlx
     return (sa, lp, up)
 
 
-def reverse_samples_ham_tf(batch_size, Nqubit, target_vocab_size, hl, hlx, tau, ansatz):
+def reverse_samples_ham_tf(batch_size, Nqubit, target_vocab_size, hl, hlx, tau, ansatz, ansatz_copy):
 
   samples,lP = ansatz.sample(batch_size) # get samples from the model
   lP = tf.reshape(lP,[-1,1]) ## necessary for concatenate
@@ -359,7 +409,7 @@ def reverse_samples_ham_tf(batch_size, Nqubit, target_vocab_size, hl, hlx, tau, 
   flip,co = flip2_reverse_tf(samples,hlx,target_vocab_size,site=[Nqubit-2, Nqubit-1])
   #flip,co = flip2_reverse_swift(samples,hlx,target_vocab_size,site=[Nqubit-2, Nqubit-1])
   flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
-  Pj = tf.exp(ansatz(flip))
+  Pj = tf.exp(ansatz_copy(flip))
   co_Pj = tf.reshape(co*Pj,[batch_size, 16])
   co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
   update_Pi += co_Pj_sum
@@ -367,7 +417,7 @@ def reverse_samples_ham_tf(batch_size, Nqubit, target_vocab_size, hl, hlx, tau, 
     flip,co = flip2_reverse_tf(samples,hl,target_vocab_size,site=[i,i+1])
     #flip,co = flip2_reverse_swift(samples,hl,target_vocab_size,site=[i,i+1])
     flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
-    Pj = tf.exp(ansatz(flip))
+    Pj = tf.exp(ansatz_copy(flip))
     co_Pj = tf.reshape(co*Pj,[batch_size, 16])
     co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
     update_Pi += co_Pj_sum

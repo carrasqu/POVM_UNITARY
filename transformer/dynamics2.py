@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from POVM import POVM
 import itertools as it
 from MPS import MPS
+import functools
 import sys
 import os
 import time
@@ -110,28 +111,46 @@ ansatz_copy.sample(10)
 
 
 @tf.function
-def batch_training(num_batch, batch_size, Nqubit, target_vocab_size, hl, hlx, tau, optimizer, ansatz, ansatz_copy):
+def batch_training_ham(num_batch, batch_size, Nqubit, target_vocab_size, hl, hlx, tau, optimizer, ansatz, ansatz_copy):
 
   for _ in tf.range(num_batch):
-    samples_lP_co = reverse_samples_ham_tf(batch_size, Nqubit, target_vocab_size, hl, hlx, tau, ansatz_copy)
-    #loss = loss_function3(samples_lP_co,ansatz)
-    #optimizer.minimize(loss=loss, var_list=ansatz.trainable_variables)
-    with tf.GradientTape() as tape:
-        loss = loss_function3(samples_lP_co,ansatz)
+    samples_lP_co = reverse_samples_ham_tf(batch_size, Nqubit, target_vocab_size, hl, hlx, tau, ansatz, ansatz_copy)
+    loss_fn = functools.partial(loss_function3,samples_lP_co,ansatz)
+    optimizer.minimize(loss=loss_fn, var_list=ansatz.trainable_variables)
+    #with tf.GradientTape() as tape:
+    #    loss = loss_function3(samples_lP_co,ansatz)
 
-    gradients = tape.gradient(loss, ansatz.trainable_variables)
-    optimizer.apply_gradients(zip(gradients, ansatz.trainable_variables))
+    #gradients = tape.gradient(loss, ansatz.trainable_variables)
+    #optimizer.apply_gradients(zip(gradients, ansatz.trainable_variables))
+
+
+@tf.function
+def batch_training_gate(num_batch, batch_size, Nqubit, target_vocab_size, gate, sites, optimizer, ansatz, ansatz_copy):
+
+  for _ in tf.range(num_batch):
+    samples_lP_co = reverse_samples_tf(batch_size, Nqubit, target_vocab_size, gate, sites, ansatz, ansatz_copy)
+    loss_fn = functools.partial(loss_function2,samples_lP_co,ansatz)
+    optimizer.minimize(loss=loss_fn, var_list=ansatz.trainable_variables)
+    #with tf.GradientTape() as tape:
+    #    loss = loss_function3(samples_lP_co,ansatz)
+
+    #gradients = tape.gradient(loss, ansatz.trainable_variables)
+    #optimizer.apply_gradients(zip(gradients, ansatz.trainable_variables))
+
 
 
 
 num_batch = 5
 batch_size = 10
+sites=[0,1]
+gate = povm.P_gate(povm.cnot)
 optimizer = tf.keras.optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.98, epsilon=1e-9) ## lr=1e-4
 
-batch_training(num_batch, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, optimizer, ansatz, ansatz_copy)
+#batch_training_ham(num_batch, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, optimizer, ansatz, ansatz_copy)
+batch_training_gate(num_batch, batch_size, Nqubit, target_vocab_size, gate, sites, optimizer, ansatz, ansatz_copy)
+
 
 assert False, 'stop'
-
 
 Fidelity=[]
 for t in range(T):
