@@ -48,7 +48,7 @@ j_init = 0
 
 povm_='Tetra_pos'
 initial_state='0'
-tau = 10/float(T)
+tau = 0.1/float(T)
 povm = POVM(POVM=povm_, Number_qubits=Nqubit, initial_state=initial_state,Jz=1.0,hx=1.0,eps=tau)
 mps = MPS(POVM=povm_,Number_qubits=Nqubit,MPS="GHZ")
 bias = povm.getinitialbias(initial_state)
@@ -71,10 +71,10 @@ povm.construct_Nframes()
 povm.construct_ham()
 psi, E = povm.ham_eigh()
 ## GHZ state
-psi = np.zeros(2**Nqubit)
-psi[0] = 1.
-psi[-1] = 1.
-psi = psi/ np.sqrt(2)
+#psi = np.zeros(2**Nqubit)
+#psi[0] = 1.
+#psi[-1] = 1.
+#psi = psi/ np.sqrt(2)
 
 # construct density matrix
 pho = np.outer(psi, np.conjugate(psi))
@@ -120,13 +120,14 @@ def batch_training_ham(num_batch, batch_size, Nqubit, target_vocab_size, hl, hlx
 
   for _ in tf.range(num_batch):
     samples_lP_co = reverse_samples_ham_tf(batch_size, Nqubit, target_vocab_size, hl, hlx, tau, ansatz, ansatz_copy)
-    loss_fn = functools.partial(loss_function3,samples_lP_co,ansatz)
-    optimizer.minimize(loss=loss_fn, var_list=ansatz.trainable_variables)
-    #with tf.GradientTape() as tape:
-    #    loss = loss_function3(samples_lP_co,ansatz)
+    samples_lP_co = tf.random.shuffle(samples_lP_co)
+	#loss_fn = functools.partial(loss_function3,samples_lP_co,ansatz)
+	#optimizer.minimize(loss=loss_fn, var_list=ansatz.trainable_variables)
+    with tf.GradientTape() as tape:
+        loss = loss_function3(samples_lP_co,ansatz)
 
-    #gradients = tape.gradient(loss, ansatz.trainable_variables)
-    #optimizer.apply_gradients(zip(gradients, ansatz.trainable_variables))
+    gradients = tape.gradient(loss, ansatz.trainable_variables)
+    optimizer.apply_gradients(zip(gradients, ansatz.trainable_variables))
 
 
 @tf.function
@@ -169,32 +170,38 @@ optimizer = tf.keras.optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.98, epsilon=1
 Fidelity=[]
 for t in range(T):
 
-  SITE = [[0]]
-  GATE = [povm.H]
-  P_GATE = [povm.P_gate(povm.H)]
-  for i in range(Nqubit-1):
-      SITE.append([i,i+1])
-      GATE.append(povm.cnot)
-      P_GATE.append(povm.P_gate(povm.cnot))
+  #SITE = [[0]]
+  #GATE = [povm.H]
+  #P_GATE = [povm.P_gate(povm.H)]
+  #for i in range(Nqubit-1):
+  #    SITE.append([i,i+1])
+  #    GATE.append(povm.cnot)
+  #    P_GATE.append(povm.P_gate(povm.cnot))
   #SITE = [[0,1]]
   #GATE = [povm.mat2]
   #P_GATE = [povm.P_gate(povm.mat2)]
 
-  for i in range(len(SITE)):
+  pho_t = pho_t - tau *( povm.ham @ pho_t + pho_t @ povm.ham)
+  pho_t = pho_t / np.trace(pho_t)
+  prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
+  #plt.figure(3)
+  #plt.bar(np.arange(4**Nqubit),prob_t)
+  print('prob diff at time '+str(t), np.linalg.norm(prob_t-prob_povm,ord=1))
 
-    sites=SITE[i]
-    gate = P_GATE[i]
-    gtype = int(gate.ndim/2)
-    kron_gate = povm.kron_gate(GATE[i], sites[0], Nqubit)
-    psi_t = psi_t @ kron_gate
-    psi_t = psi_t / np.linalg.norm(psi_t)
-    pho_t = np.outer(psi_t, np.conjugate(psi_t))
-    prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
+  #for i in range(len(SITE)):
+  for i in range(EPOCHS):
+    print('epoch', i)
+    #sites=SITE[i]
+    #gate = P_GATE[i]
+    #gtype = int(gate.ndim/2)
+    #kron_gate = povm.kron_gate(GATE[i], sites[0], Nqubit)
+    #psi_t = psi_t @ kron_gate
+    #psi_t = psi_t / np.linalg.norm(psi_t)
+    #pho_t = np.outer(psi_t, np.conjugate(psi_t))
+    #prob_t = ncon((pho_t,povm.Mn),([1,2],[-1,2,1])).real
 
-    #optimizer = tf.keras.optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.98, epsilon=1e-9) ## lr=1e-4
-    batch_training_gate(num_batch, batch_size, Nqubit, target_vocab_size, gate, sites, optimizer, ansatz, ansatz_copy)
-    #batch_training_ham(num_batch, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, optimizer, ansatz, ansatz_copy)
-    ansatz_copy.set_weights(ansatz.get_weights())
+    #batch_training_gate(num_batch, batch_size, Nqubit, target_vocab_size, gate, sites, optimizer, ansatz, ansatz_copy)
+    batch_training_ham(num_batch, batch_size, Nqubit, target_vocab_size, povm.hl_com, povm.hlx_com, tau, optimizer, ansatz, ansatz_copy)
 
     samp,llpp = ansatz.sample(10) # get samples from the mode
     #cFid, Fid = Fidelity_test(samp, llpp, MAX_LENGTH, target_vocab_size, mps, povm, prob, pho, ansatz)
@@ -203,11 +210,21 @@ for t in range(T):
     #Fidelity.append(np.array([cFid, Fid]))
     Fidelity.append(np.array([cFid_t, Fid_t]))
 
-    ansatz.save_weights('./models/transformer2', save_format='tf')
+  ansatz.save_weights('./models/transformer2', save_format='tf')
+  ansatz_copy.set_weights(ansatz.get_weights())
+
 
 
 Fidelity = np.array(Fidelity)
 np.savetxt('./data/Fidelity.txt',Fidelity)
+
+
+prob_f = np.exp(vectorize(Nqubit, target_vocab_size, ansatz))
+plt.figure()
+plt.bar(np.arange(4**Nqubit),prob_f)
+plt.figure()
+plt.bar(np.arange(4**Nqubit),prob_t)
+
 assert False, 'stop'
 
 

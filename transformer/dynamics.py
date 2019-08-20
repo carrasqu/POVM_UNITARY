@@ -43,7 +43,7 @@ j_init = 0
 
 povm_='Tetra_pos'
 initial_state='0'
-tau = 10/float(T)
+tau = 0.1/float(T)
 povm = POVM(POVM=povm_, Number_qubits=Nqubit, initial_state=initial_state,Jz=1.0,hx=1.0,eps=tau)
 mps = MPS(POVM=povm_,Number_qubits=Nqubit,MPS="GHZ")
 bias = povm.getinitialbias(initial_state)
@@ -103,6 +103,7 @@ print('Exact beginning energy:', np.trace(povm.ham @ pho_povm))
 # define training setting
 #learning_rate = CustomSchedule(d_model)
 #optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+optimizer = tf.keras.optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.98, epsilon=1e-9) ## lr=1e-4
 
 
 Fidelity=[]
@@ -146,8 +147,8 @@ for t in range(T):
     #ept = tf.constant(np.concatenate(samples_lP_co,axis=1))
     nsteps = int(samples_lP_co[0].shape[0] / batch_size) ## samples.shape[0]=Ndataset + batchsize
     bcount = 0
+    #optimizer = tf.keras.optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.98, epsilon=1e-9) ## lr=1e-4
 
-    optimizer = tf.keras.optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.98, epsilon=1e-9) ## lr=1e-4
     for epoch in range(EPOCHS):
         for idx in range(nsteps):
             print("time step", t, "epoch", epoch,"out of ", EPOCHS, 'nsteps', idx)

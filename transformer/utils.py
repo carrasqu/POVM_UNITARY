@@ -418,6 +418,7 @@ def reverse_samples_ham_tf(batch_size, Nqubit, target_vocab_size, hl, hlx, tau, 
   #flip,co = flip2_reverse_swift(samples,hlx,target_vocab_size,site=[Nqubit-2, Nqubit-1])
   flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
   Pj = tf.exp(ansatz_copy(flip))
+  #Pj = tf.exp(ansatz(flip))
   co_Pj = tf.reshape(co*Pj,[batch_size, 16])
   co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
   update_Pi += co_Pj_sum
@@ -426,6 +427,7 @@ def reverse_samples_ham_tf(batch_size, Nqubit, target_vocab_size, hl, hlx, tau, 
     #flip,co = flip2_reverse_swift(samples,hl,target_vocab_size,site=[i,i+1])
     flip = tf.cast(flip, dtype=tf.uint8) # c are configurations
     Pj = tf.exp(ansatz_copy(flip))
+    #Pj = tf.exp(ansatz(flip))
     co_Pj = tf.reshape(co*Pj,[batch_size, 16])
     co_Pj_sum = tf.reduce_sum(co_Pj, axis=1)
     update_Pi += co_Pj_sum
